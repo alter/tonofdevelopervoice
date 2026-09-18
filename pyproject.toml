@@ -4,7 +4,7 @@ name = "tonofdevelopervoice"
 version = "0.1.0"
 description = "Rewrite AI-generated commit/PR text into authentic pre-2021 engineering style"
 requires-python = ">=3.11"
-dependencies = ["pyyaml"]
+dependencies = ["pyyaml", "flask"]
 
 [dependency-groups]
 dev = [
