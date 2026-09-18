@@ -1,5 +1,5 @@
 ---
-status: running
+status: paused
 created: 2026-09-18
 ---
 # tonofdevelopervoice v1: research + corpus/training pipeline + CLI/web form
@@ -17,15 +17,15 @@ the user runs on the separate 5090 host this session cannot reach). MCP stays ou
 scope for v1 per `docs/PROJECT.md`.
 
 ## Acceptance criteria
-- [ ] AC1 Research synthesis exists and names concrete choices — `test -f docs/research/SUMMARY.md && grep -Eq '^## Decision: (Framework|Base model|Training approach|Data collection|Evaluation)' docs/research/SUMMARY.md`
-- [ ] AC2 Corpus-filtering logic (pre-2021 cutoff, AI co-author trailer exclusion) is unit-tested and green — `pytest tests/test_filters.py -q`
-- [ ] AC3 Pilot collection produced real records from at least one repo — `test -s data/raw/linux.jsonl` (or the T04/T06-decided path) and its manifest shows a non-zero count
-- [ ] AC4 Full collection ran against all five named repos with a manifest recording per-repo counts — `test -f data/manifest.json && python3 -c "import json,sys; m=json.load(open('data/manifest.json')); assert all(m.get(r,0)>0 for r in ['linux','postgresql','nginx','apache','mysql'])"`
-- [ ] AC5 Training config exists and validates — `python3 -c "from tonofdevelopervoice.train.config import load_training_config; load_training_config('training/config.yaml')"` (amended from the original `soup.yaml`/`soup config validate` wording after T01 changed the framework decision from Soup to Unsloth, which has no equivalent CLI-validated YAML — see `## Assumptions`)
-- [ ] AC6 CLI works end to end against the stub backend — `pytest tests/test_cli.py -q`
-- [ ] AC7 Web form works end to end against the stub backend — `pytest tests/test_web.py -q`
-- [ ] AC8 Deployment runbook exists covering venv, tokens, training, serving on the 5090 host — `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
-- [ ] AC9 Gate checks green at every task, coverage floor never falls — `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
+- [x] AC1 Research synthesis exists and names concrete choices — `test -f docs/research/SUMMARY.md && grep -Eq '^## Decision: (Framework|Base model|Training approach|Data collection|Evaluation)' docs/research/SUMMARY.md`
+- [x] AC2 Corpus-filtering logic (pre-2021 cutoff, AI co-author trailer exclusion) is unit-tested and green — `pytest tests/test_filters.py -q`
+- [x] AC3 Pilot collection produced real records from at least one repo — `test -s data/raw/linux.jsonl` (or the T04/T06-decided path) and its manifest shows a non-zero count
+- [x] AC4 Full collection ran against all five named repos with a manifest recording per-repo counts — `test -f data/manifest.json && python3 -c "import json,sys; m=json.load(open('data/manifest.json')); assert all(m.get(r,0)>0 for r in ['linux','postgresql','nginx','apache','mysql'])"`
+- [x] AC5 Training config exists and validates — `python3 -c "from tonofdevelopervoice.train.config import load_training_config; load_training_config('training/config.yaml')"` (amended from the original `soup.yaml`/`soup config validate` wording after T01 changed the framework decision from Soup to Unsloth, which has no equivalent CLI-validated YAML — see `## Assumptions`)
+- [x] AC6 CLI works end to end against the stub backend — `pytest tests/test_cli.py -q`
+- [x] AC7 Web form works end to end against the stub backend — `pytest tests/test_web.py -q`
+- [x] AC8 Deployment runbook exists covering venv, tokens, training, serving on the 5090 host — `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
+- [x] AC9 Gate checks green at every task, coverage floor never falls — `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
 
 ## Stack
 Python 3.14.4 (dev MacBook, pipeline/CLI/web code) managed with `uv` (resolves CPython
@@ -175,13 +175,20 @@ this session cannot reach directly.
       collection (if not already done)/training/`scripts/evaluate.py`/CLI/web form on that
       host — verify: `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
 
-- [ ] T17 `[!] BLOCKED (needs confirmation): run the full fine-tune, `scripts/evaluate.py`,
-      and a live CLI/web-form check against the real trained model on the 5090 host` — this
+- [!] BLOCKED (needs confirmation): T17 run the full fine-tune, `scripts/evaluate.py`,
+      and a live CLI/web-form check against the real trained model on the 5090 host — this
       session has no SSH/remote access to that host (missing dependency), so this step
       cannot be executed unattended; hand off `docs/runbook-training.md` and
       `docs/runbook-deploy.md` to the user and stop here.
 
 ## Log
+- Finish: T00-T16 all `[x]`, T17 `[!] BLOCKED` (no SSH/remote access to the 5090 host —
+  missing dependency, per plan Decisions). Re-ran every AC once more from a clean gate
+  pass: AC1-AC9 all pass (AC1 research summary, AC2 filter tests, AC3 pilot linux.jsonl,
+  AC4 5-repo manifest, AC5 training config validates, AC6 CLI tests, AC7 web tests, AC8
+  runbook-deploy.md has HF_TOKEN/GITHUB_TOKEN, AC9 `ruff check . && mypy . && pytest &&
+  coverage_gate.py --run` — 91 tests, coverage floor 100.00%, never fell below the T00
+  baseline). `status: paused`, ending with `NEED_HUMAN` per the run protocol.
 - T00: uv-managed venv (CPython 3.13.7), pyproject.toml (ruff+mypy strict+pytest+pytest-cov), src/tonofdevelopervoice package, scripts/coverage_gate.py, one scaffolding test. Baseline: ruff/mypy/pytest all clean pre-existing (fresh repo, nothing to break); coverage floor set to 100.00% (trivial __init__.py, single covered line) via `.coverage-gate.json`. Gitignored .coverage/coverage.xml/.pytest_cache/.ruff_cache/.mypy_cache.
 - T01-T06 (Part 1 research, delegated to web-researcher/researcher subagents, one doc per topic): frameworks.md (Unsloth over Soup — Soup's recent silent-correctness bug history), base-models.md (Qwen3-8B-Base, fallback Mistral-3-8B), training-approach.md (SFT on LLM-synthesized paired data, STRAP-style, not plain LM continuation or standalone DPO), data-collection.md (git clone+log mining primary, GitHub GraphQL API for PR text secondary, GH Archive/BigQuery skipped), evaluation.md (6-part automated report: MiniLM similarity, BERTScore, validated style classifier, GPT-2 perplexity, forced-choice LLM-judge, optional MAUVE), SUMMARY.md consolidating all five with one `## Decision: <Topic>` each. PROJECT.md/AGENTS.md updated for the Soup->Unsloth pivot. All research verify commands green (file exists + `## Decision` section present).
 - T16: Before writing the runbook, added `tonofdevelopervoice.serve.factory.default_backend()` (env var `TONOFDEVELOPERVOICE_MODEL_DIR` selects `UnslothInferenceBackend` over the stub, tested via the same fake-`unsloth`-module pattern) and wired it into CLI/web's `main()` — otherwise the runbook would have had to tell the owner to hand-edit source to point at the real model. `docs/runbook-deploy.md` covers credentials, data sync/re-collection, training, evaluation and serving the CLI/web form against the real model via that env var, referencing `runbook-training.md` for the parts already covered rather than duplicating. AC8 satisfied. Gate green, coverage floor held at 100.00% (91 tests).
