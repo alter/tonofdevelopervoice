@@ -5,3 +5,7 @@ peft
 bitsandbytes
 datasets
 pyyaml
+scikit-learn
+sentence-transformers
+bert-score
+transformers

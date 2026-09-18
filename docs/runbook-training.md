@@ -73,8 +73,23 @@ already-ignored ML-artifact paths).
 
 ## 6. After training
 
-- Run `scripts/evaluate.py` (T15) against `training/output` and the held-out eval split
-  to get the automated report from `docs/research/evaluation.md`.
-- Wire the real `InferenceBackend` (T14) to load from `training/output` and exercise the
-  CLI/web form (T12/T13) against the real model — this is the one part of the plan this
-  session cannot verify itself (see plan T17, `[!] BLOCKED`).
+- Wire `UnslothInferenceBackend("training/output")` (T14) in place of the CLI/web form's
+  default `StubInferenceBackend`, and generate rewrites for every `input` in
+  `data/dataset/eval.jsonl`, writing `{source, model_output, reference}` triples (where
+  `source`/`reference` are the eval row's `input`/`output`) to a JSONL file, e.g.
+  `data/dataset/eval_generated.jsonl` — this is the one step this session cannot do
+  itself (needs the real trained model on this host).
+- Run the automated evaluation report (T15, metrics from `docs/research/evaluation.md`):
+  ```
+  python3 scripts/evaluate.py \
+    --eval-file data/dataset/eval_generated.jsonl \
+    --train-file data/dataset/train.jsonl \
+    --out data/dataset/eval_report.json
+  ```
+  Needs `scikit-learn`, `sentence-transformers`, `bert-score`, `transformers` (all in
+  `training/requirements.txt`, installed alongside the training deps in step 3). The
+  forced-choice LLM-judge metric (`judge_win_rate`) is intentionally left `null` — no
+  LLM-judge API key is configured for this project; see
+  `tonofdevelopervoice.evaluate.judge.UnavailableJudge` to wire a real one if wanted.
+- Exercise the CLI/web form (T12/T13) against the real model — this is the other part of
+  the plan this session cannot verify itself (see plan T17, `[!] BLOCKED`).
