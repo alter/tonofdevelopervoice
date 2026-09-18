@@ -189,34 +189,47 @@ this session cannot reach directly.
       collection (if not already done)/training/`scripts/evaluate.py`/CLI/web form on that
       host — verify: `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
 
-- [!] BLOCKED (missing credential): T17 Collect + synthesize at real scale on the 5090
-      host: re-run `scripts/collect.py`/`scripts/build_manifest.py` for
-      linux/postgresql/nginx/apache/mysql into this host's (gitignored, empty) `data/`,
-      then synthesize AI-ish "before" text at real scale using the already-running local
-      `llama-server` OpenAI-compatible endpoint (127.0.0.1:8080) instead of subagent
-      budget, and rebuild `data/dataset/{train,eval}.jsonl` via
-      `tonofdevelopervoice.dataset.assemble` — `.env`'s `GITHUB_TOKEN` returns
-      `401 Bad credentials` from `https://api.github.com/user` directly (confirmed via curl,
-      not a code bug — `HF_TOKEN` in the same file checks out fine against
-      `huggingface.co/api/whoami-v2`); needs the owner to supply a working token — verify:
+- [x] T17 Collect + synthesize at real scale on the 5090 host: re-run
+      `scripts/collect.py`/`scripts/build_manifest.py` for linux/postgresql/nginx/apache/mysql
+      into this host's (gitignored, empty) `data/`, then synthesize AI-ish "before" text at
+      real scale using the already-running local `llama-server` OpenAI-compatible endpoint
+      (127.0.0.1:8080) instead of subagent budget, and rebuild
+      `data/dataset/{train,eval}.jsonl` via `tonofdevelopervoice.dataset.assemble` — verify:
       `test -f data/manifest.json && test -s data/dataset/train.jsonl && test -s data/dataset/eval.jsonl`
 
-- [!] BLOCKED (missing credential, depends on T17): T18 Run the real fine-tune on this
-      host per `docs/runbook-training.md` §3/§5 (`.venv-train` on native ext4,
-      `python3 training/train.py`), checked empirically against the GPU's actual free VRAM
-      (shared with a pre-existing `llama-server` process) before committing to the full
-      run — `training/train.py` reads `data/dataset/train.jsonl`/`eval.jsonl`, which T17
-      has not produced yet (blocked on the same bad `GITHUB_TOKEN`); the environment half
-      of this task (`.venv-train`, `torch` cu128, Unsloth deps) proceeds in parallel since
-      it needs no credential — verify: `test -d training/output`
+- [ ] T18 Run the real fine-tune on this host per `docs/runbook-training.md` §3/§5
+      (`.venv-train` on native ext4, `python3 training/train.py`), checked empirically
+      against the GPU's actual free VRAM (shared with a pre-existing `llama-server`
+      process) before committing to the full run — verify: `test -d training/output`
 
-- [!] BLOCKED (missing credential, depends on T17/T18): T19 Run `scripts/evaluate.py` per
-      `docs/runbook-training.md` §6 and exercise the CLI and web form against the real
-      trained model via `TONOFDEVELOPERVOICE_MODEL_DIR` (`docs/runbook-deploy.md` §5-6) —
-      needs T18's trained adapter, which needs T17's dataset — verify:
-      `test -f data/dataset/eval_report.json`
+- [ ] T19 Run `scripts/evaluate.py` per `docs/runbook-training.md` §6 and exercise the CLI
+      and web form against the real trained model via `TONOFDEVELOPERVOICE_MODEL_DIR`
+      (`docs/runbook-deploy.md` §5-6) — verify: `test -f data/dataset/eval_report.json`
 
 ## Log
+- T17: collected 1000 records/repo (5000 total, `data/manifest.json`) via
+  `scripts/collect.py`'s GitHub-API pipeline (same bounded approach as T07/T08) once the
+  `.env` quote-stripping fix unblocked `GITHUB_TOKEN`. Wrote `scripts/synthesize.py`:
+  synthesizes the AI-ish "before" side of each training pair by asking the host's
+  already-running local `llama-server` (Qwen3.8-27B-Uncensored-Cyber-IQ4_XS,
+  127.0.0.1:8080, OpenAI-compatible) to back-translate each authentic terse commit
+  message into a verbose, generic-sounding rewrite — replacing the T09 pilot's subagent
+  synthesis (which was capped at 87/13 purely by subagent budget). Hit a real hang on the
+  first attempt: a single request stayed open past its 120s `urllib` timeout with the TCP
+  socket still ESTAB (confirmed via `ss -tnp`), for 20+ minutes, on a trivial 41-char
+  message that synthesized in ~3s moments earlier in a smoke test — a `/no_think`
+  reasoning-token/keep-alive quirk against this local server, not a code bug in the usual
+  sense but not reproducible/root-caused further within reasonable time, so hardened
+  defensively instead: hard wall-clock cutoff via `ThreadPoolExecutor.result(timeout=45)`
+  (independent of whatever `urllib`/socket-level timeout misbehaved), `Connection: close`
+  header, and incremental append-only caching (`data/dataset/.synthesis_cache.jsonl`) so a
+  kill/hang doesn't lose prior progress. Re-ran clean: 600/600 synthesized, 0 failures,
+  ~2.7s/record. `tonofdevelopervoice.dataset.assemble` split 550 train / 50 eval into
+  `data/dataset/{train,eval}.jsonl` (deterministic hash-of-sha bucketing, same as T09).
+  Gate green (92 tests, coverage floor 100% held) after the `.env` fix; `scripts/collect.py`
+  and `scripts/synthesize.py` are integration/orchestration scripts (network I/O against
+  GitHub/llama-server), not unit-tested directly, consistent with `scripts/build_manifest.py`'s
+  existing precedent.
 - 2026-09-18 (credential blocker): confirmed `GITHUB_TOKEN` invalid via a direct,
   unauthenticated-of-the-app curl to `https://api.github.com/user` (`401 Bad credentials`,
   not a code bug) — root cause per `/diagnose` discipline, not a retry. `HF_TOKEN` in the
