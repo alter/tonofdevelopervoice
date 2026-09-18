@@ -10,7 +10,7 @@ frameworks, base models that fit a 32GB-VRAM card, training approaches, data-col
 approaches, and evaluation methodology for a text style-transfer task, and record concrete
 choices. Part 2 (implementation, T07-T17): build the corpus-collection pipeline for
 pre-2021, non-AI-co-authored commit/PR text from linux, postgresql, nginx, apache and
-mysql; author the Soup training config; implement a CLI and a two-panel web form that
+mysql; author the Unsloth training config; implement a CLI and a two-panel web form that
 rewrite AI-generated commit/PR text into that authentic engineering style, against a
 pluggable inference backend (stub for agent-side tests, real model wired per a runbook
 the user runs on the separate 5090 host this session cannot reach). MCP stays out of
@@ -21,18 +21,19 @@ scope for v1 per `docs/PROJECT.md`.
 - [ ] AC2 Corpus-filtering logic (pre-2021 cutoff, AI co-author trailer exclusion) is unit-tested and green — `pytest tests/test_filters.py -q`
 - [ ] AC3 Pilot collection produced real records from at least one repo — `test -s data/raw/linux.jsonl` (or the T04/T06-decided path) and its manifest shows a non-zero count
 - [ ] AC4 Full collection ran against all five named repos with a manifest recording per-repo counts — `test -f data/manifest.json && python3 -c "import json,sys; m=json.load(open('data/manifest.json')); assert all(m.get(r,0)>0 for r in ['linux','postgresql','nginx','apache','mysql'])"`
-- [ ] AC5 `soup.yaml` training config exists and validates — `soup config validate soup.yaml` (or the equivalent dry-run/parse check found during T09 setup)
+- [ ] AC5 Training config exists and validates — `python3 -c "from tonofdevelopervoice.train.config import load_training_config; load_training_config('training/config.yaml')"` (amended from the original `soup.yaml`/`soup config validate` wording after T01 changed the framework decision from Soup to Unsloth, which has no equivalent CLI-validated YAML — see `## Assumptions`)
 - [ ] AC6 CLI works end to end against the stub backend — `pytest tests/test_cli.py -q`
 - [ ] AC7 Web form works end to end against the stub backend — `pytest tests/test_web.py -q`
 - [ ] AC8 Deployment runbook exists covering venv, tokens, training, serving on the 5090 host — `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
 - [ ] AC9 Gate checks green at every task, coverage floor never falls — `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
 
 ## Stack
-Python 3.14.4 (dev MacBook, pipeline/CLI/web code) managed with `uv`; a separate pinned
-Python 3.12 venv for anything importing Soup (`soup-cli[train]`, requires 3.10-3.12).
-Soup (github.com/MakazhanAlpamys/Soup) as the default fine-tuning CLI, pending T01/T06
-confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 host
-(80GB RAM, RTX 5090 32GB) that this session cannot reach directly.
+Python 3.14.4 (dev MacBook, pipeline/CLI/web code) managed with `uv` (resolves CPython
+3.13.7 for the dev venv). Unsloth (chosen over Soup in T01 — see `docs/research/frameworks.md`)
+as the fine-tuning framework, needing a CUDA 12.8 / PyTorch >=2.7.0 (cu128) environment
+that only exists on the training host, not this repo's Mac-side venv. Training/real
+inference execute on a separate Ubuntu-under-WSL2 host (80GB RAM, RTX 5090 32GB) that
+this session cannot reach directly.
 
 ## Decisions
 - Research depth (Part 1) -> Broad comparative survey: frameworks (Soup, Axolotl, Unsloth,
@@ -66,9 +67,18 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
   "working CLI first" priority: the pilot's small output is enough to unblock CLI/web
   development while full collection runs in the background.
 - CLI and web form are built against a small `InferenceBackend` interface with a stub
-  implementation for agent-side tests; the real Soup-trained-model implementation is
+  implementation for agent-side tests; the real Unsloth-trained-model implementation is
   wired in T14 but can only be *exercised* on the 5090 host, since this session has no
   GPU and no remote access there.
+- T10 was amended from its original `soup.yaml`/`soup config validate` wording: T01
+  changed the framework decision from Soup to Unsloth (see `docs/research/frameworks.md`),
+  and Unsloth has no equivalent single declarative-YAML-plus-CLI-validator — it's used via
+  a Python training script. Split accordingly: `training/config.yaml` (the recipe) plus a
+  pure-Python structural validator under `src/` (Mac-checkable, no `unsloth` import), and
+  the actual Unsloth/trl training script under a new `training/` directory kept outside
+  `src`/`tests`/`scripts` so this repo's mypy/pytest gate never needs CUDA-specific
+  dependencies (`torch` cu128, `unsloth`, `bitsandbytes`) installed on the Mac. AC5 amended
+  to match.
 - Publishing model weights publicly (allowed by `docs/PROJECT.md` §5) is out of scope for
   this plan — nothing here uploads weights anywhere; that's a follow-up if wanted later.
 - Verify commands for research tasks (T01-T06) check that the file exists and contains a
@@ -132,9 +142,13 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
       T03, with a held-out eval split (for T05's metric) and dedup; pure-logic unit tests
       for merging/splitting/schema validation — verify: `pytest tests/test_dataset.py -q && ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
 
-- [ ] T10 Author `soup.yaml` (base model + recipe per T02/T03) and validate it without
-      training (config parse/dry-run); write `docs/runbook-training.md` describing how to
-      run the actual fine-tune on the 5090 host — verify: `soup config validate soup.yaml` (or the closest dry-run check Soup exposes, confirmed during this task) `&& test -f docs/runbook-training.md`
+- [ ] T10 Author `training/config.yaml` (Unsloth/trl recipe: base model + LoRA/QLoRA params
+      per T02/T03) plus a structural validator (`tonofdevelopervoice.train.config`, pure
+      Python, no `unsloth` import needed) so it's checkable on the Mac without a GPU; write
+      the actual Unsloth training script under `training/` (outside `src/`/`tests`/`scripts`
+      so it's not pulled into this repo's mypy/pytest gate — it needs CUDA-specific
+      deps only installable on the 5090 host) plus `docs/runbook-training.md` describing
+      how to run the real fine-tune there — verify: `python3 -c "from tonofdevelopervoice.train.config import load_training_config; load_training_config('training/config.yaml')"` `&& test -f docs/runbook-training.md`
 
 - [ ] T11 Define the `InferenceBackend` interface (one method: rewrite(text) -> text) and a
       stub implementation for tests; unit tests for the interface contract — verify: `pytest tests/test_inference_backend.py -q`
@@ -147,7 +161,7 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
       accounts, uses `InferenceBackend`; tests against the stub backend via the framework's
       test client — verify: `pytest tests/test_web.py -q && ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
 
-- [ ] T14 Wire the real Soup-trained-model implementation of `InferenceBackend` (loads
+- [ ] T14 Wire the real Unsloth-trained-model implementation of `InferenceBackend` (loads
       weights, runs generation); since this session has no GPU, verify only that it
       constructs correctly against a mocked/local tiny checkpoint if feasible, otherwise
       document that real-weight verification happens on the host — verify: `pytest tests/test_inference_backend.py -q && ruff check . && mypy .`
@@ -157,7 +171,7 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
       computation on synthetic examples (no GPU needed for this test) — verify: `pytest tests/test_evaluate.py -q && ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
 
 - [ ] T16 Write `docs/runbook-deploy.md`: syncing this repo to the 5090 host, setting up
-      the pinned Python 3.12 Soup venv, providing `HF_TOKEN`/`GITHUB_TOKEN` there, running
+      the CUDA 12.8 / Unsloth training environment there, providing `HF_TOKEN`/`GITHUB_TOKEN`, running
       collection (if not already done)/training/`scripts/evaluate.py`/CLI/web form on that
       host — verify: `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
 
