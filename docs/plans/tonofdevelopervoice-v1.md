@@ -89,16 +89,16 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
       `scripts/coverage_gate.py`, empty `src/` package layout; run gate checks once and
       record the clean baseline (0 tests, floor 0%) in `## Log` — verify: `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run --set-floor`
 
-- [ ] T01 Research fine-tuning frameworks landscape (Soup vs Axolotl vs Unsloth vs
+- [x] T01 Research fine-tuning frameworks landscape (Soup vs Axolotl vs Unsloth vs
       LLaMA-Factory vs raw HF PEFT/TRL) as of Sept 2026; write `docs/research/frameworks.md`
       ending in a `## Decision` naming the chosen framework and why — verify: `test -f docs/research/frameworks.md && grep -q '^## Decision' docs/research/frameworks.md`
 
-- [ ] T02 Research base model candidates that fit 32GB VRAM (QLoRA/LoRA, Sept 2026), license
+- [x] T02 Research base model candidates that fit 32GB VRAM (QLoRA/LoRA, Sept 2026), license
       terms (HF token now available so gated models are eligible), and suitability for a
       style/tone rewrite task; write `docs/research/base-models.md` with a `## Decision` —
       verify: `test -f docs/research/base-models.md && grep -q '^## Decision' docs/research/base-models.md`
 
-- [ ] T03 Research the training/fine-tuning approach for this specific task (plain LM
+- [x] T03 Research the training/fine-tuning approach for this specific task (plain LM
       continuation on target-style text vs supervised input->output rewrite pairs vs
       DPO/ORPO/instruction-tuning), and what shape the dataset needs to take as a result;
       write `docs/research/training-approach.md` with a `## Decision` — verify: `test -f docs/research/training-approach.md && grep -q '^## Decision' docs/research/training-approach.md`

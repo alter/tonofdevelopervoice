@@ -4,9 +4,9 @@ Shared instructions for every coding agent in this repository. `CLAUDE.md` impor
 
 ## Stack & environment
 
-- Pipeline/CLI/web code: Python on the dev MacBook (M2, 24GB RAM, usually <8GB free), system Python is 3.14.4 via homebrew, `uv` available for env/deps.
-- Training: [Soup](https://github.com/MakazhanAlpamys/Soup) (`soup-cli`) requires **Python 3.10–3.12** — pin a separate venv for anything that imports the training stack; do not assume the system 3.14 interpreter works there.
-- Real fine-tuning runs happen on a separate Ubuntu-under-WSL2 host (80GB RAM, RTX 5090 32GB VRAM), not the Mac. The Mac has no GPU worth training on.
+- Pipeline/CLI/web code: Python on the dev MacBook (M2, 24GB RAM, usually <8GB free), system Python is 3.14.4 via homebrew, `uv` available for env/deps (`uv sync` currently resolves CPython 3.13.7 for the dev venv).
+- Training framework: **Unsloth** (see `docs/research/frameworks.md` — chosen over Soup after Soup's Aug-Sep 2026 releases showed a run of silent-correctness bugs; raw Hugging Face transformers+peft+trl is the fallback if Unsloth's kernels ever misbehave).
+- Real fine-tuning runs happen on a separate Ubuntu-under-WSL2 host (80GB RAM, RTX 5090 32GB VRAM), not the Mac — the Mac has no GPU worth training on. That host is Blackwell (sm_120): needs driver >=570, CUDA Toolkit 12.8 (not the `apt` default, which is CUDA 12.0), PyTorch >=2.7.0 cu128 wheel.
 - `GITHUB_TOKEN` lives in `.env` (already gitignored) — used for GitHub API calls during corpus collection (PR metadata, filtering AI co-author trailers). Load it from `.env`, never hardcode or print it.
 - Full scope, capability ledger and unattended-work policy for this project: `docs/PROJECT.md`.
 

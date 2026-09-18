@@ -12,7 +12,7 @@ Single source of truth for what this project is, what it contains, and what the 
 | Name / slug | tonofdevelopervoice |
 | Repository | git@github.com:alter/tonofdevelopervoice.git (public, empty at intake) |
 | Other agents or people working in this repo | Roman Dolgov (owner) + other Claude Code agent sessions; no other humans |
-| Stack (from the machine, with versions) | Python 3.14.4 (homebrew, `/opt/homebrew/bin/python3`) on the dev MacBook (M2, 24GB RAM, usually <8GB free); package manager `uv` 0.8.13 present. Training/fine-tuning uses [Soup](https://github.com/MakazhanAlpamys/Soup) (`soup-cli`), which requires **Python 3.10–3.12** — the training env must be pinned to 3.12, separate from the system 3.14 used for pipeline/CLI/web code. Training/serving-scale runs execute on a separate Ubuntu-under-WSL2 host with 80GB RAM + RTX 5090 32GB VRAM. |
+| Stack (from the machine, with versions) | Python 3.14.4 (homebrew, `/opt/homebrew/bin/python3`) on the dev MacBook (M2, 24GB RAM, usually <8GB free); package manager `uv` 0.8.13 present; `uv sync` resolves a local dev venv on CPython 3.13.7. Training/fine-tuning uses **Unsloth** (chosen over Soup in `docs/research/frameworks.md` T01 — Soup's Aug-Sep 2026 releases show a run of silent-correctness bugs; raw Hugging Face transformers+peft+trl is the fallback), which needs a CUDA 12.8 / PyTorch >=2.7.0 (cu128) environment on the training host. Training/serving-scale runs execute on a separate Ubuntu-under-WSL2 host with 80GB RAM + RTX 5090 32GB VRAM (Blackwell, sm_120 — needs driver >=570, CUDA Toolkit 12.8, not the `apt` default). |
 
 ## 2. Goal
 
