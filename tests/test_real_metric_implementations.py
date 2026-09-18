@@ -70,6 +70,78 @@ def test_bertscore_scorer_returns_f1(fake_bert_score: MagicMock) -> None:
     )
 
 
+@pytest.fixture
+def fake_transformers_roberta_tokenizer() -> Generator[type, None, None]:
+    class FakeRobertaTokenizer:
+        bos_token_id = 0
+        eos_token_id = 2
+
+    module = ModuleType("transformers")
+    module.RobertaTokenizer = FakeRobertaTokenizer  # type: ignore[attr-defined]
+
+    original = sys.modules.get("transformers")
+    sys.modules["transformers"] = module
+    try:
+        yield FakeRobertaTokenizer
+    finally:
+        if original is not None:
+            sys.modules["transformers"] = original
+        else:
+            del sys.modules["transformers"]
+
+
+def test_patch_build_inputs_with_special_tokens_adds_missing_method(
+    fake_transformers_roberta_tokenizer: type,
+) -> None:
+    from tonofdevelopervoice.evaluate.reference_scorer import (
+        _patch_build_inputs_with_special_tokens,
+    )
+
+    assert not hasattr(
+        fake_transformers_roberta_tokenizer, "build_inputs_with_special_tokens"
+    )
+    _patch_build_inputs_with_special_tokens()
+
+    tokenizer = fake_transformers_roberta_tokenizer()
+    assert tokenizer.build_inputs_with_special_tokens([5, 6]) == [0, 5, 6, 2]
+    assert tokenizer.build_inputs_with_special_tokens([5], [7]) == [0, 5, 2, 2, 7, 2]
+
+
+def test_patch_build_inputs_with_special_tokens_is_a_noop_when_present(
+    fake_transformers_roberta_tokenizer: type,
+) -> None:
+    from tonofdevelopervoice.evaluate.reference_scorer import (
+        _patch_build_inputs_with_special_tokens,
+    )
+
+    sentinel = object()
+    fake_transformers_roberta_tokenizer.build_inputs_with_special_tokens = (  # type: ignore[attr-defined]
+        lambda self, token_ids_0, token_ids_1=None: sentinel
+    )
+
+    _patch_build_inputs_with_special_tokens()
+
+    assert (
+        fake_transformers_roberta_tokenizer.build_inputs_with_special_tokens  # type: ignore[attr-defined]
+        is not None
+    )
+    tokenizer = fake_transformers_roberta_tokenizer()
+    assert tokenizer.build_inputs_with_special_tokens([1]) is sentinel
+
+
+def test_patch_build_inputs_with_special_tokens_noop_without_transformers() -> None:
+    from tonofdevelopervoice.evaluate.reference_scorer import (
+        _patch_build_inputs_with_special_tokens,
+    )
+
+    original = sys.modules.pop("transformers", None)
+    try:
+        _patch_build_inputs_with_special_tokens()
+    finally:
+        if original is not None:
+            sys.modules["transformers"] = original
+
+
 class FakeLoss:
     def item(self) -> float:
         return 0.0
