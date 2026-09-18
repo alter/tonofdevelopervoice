@@ -37,8 +37,9 @@ def format_example(example: dict[str, str]) -> dict[str, str]:
 
 
 def train(config: TrainingConfig) -> None:
+    # Unsloth must be imported before trl/transformers/peft to patch them correctly.
+    from unsloth import FastLanguageModel  # noqa: I001
     from trl import SFTConfig, SFTTrainer
-    from unsloth import FastLanguageModel
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=config.base_model,

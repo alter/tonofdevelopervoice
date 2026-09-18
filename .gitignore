@@ -21,3 +21,4 @@ checkpoints/
 *.ckpt
 *.safetensors
 *.gguf
+unsloth_compiled_cache/
