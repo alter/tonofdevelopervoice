@@ -1,8 +1,11 @@
 # Deployment runbook (5090 host)
 
 End-to-end: get this repo, its data, and its trained model running on the 5090 host, then
-serve the CLI and web form against the real model. This session has no SSH/remote access
-to that host — every step below is manual, run by the owner.
+serve the CLI and web form against the real model. A session can also run directly on
+that host itself (confirmed via `nvidia-smi`/`uname` — see
+`docs/plans/tonofdevelopervoice-v1.md`'s 2026-09-18 log), in which case every step below
+runs unattended instead of being handed off; it stays written as manual steps since that
+won't always be true.
 
 Steps 1-3 (sync, host environment, install training deps) and the training/evaluation
 steps are the same as `docs/runbook-training.md` — this file adds what that one doesn't
@@ -38,11 +41,13 @@ Mac — no code changes needed, just make sure `.env` exists there.
   --out data/raw/<name>.jsonl` per repo, `python3 scripts/build_manifest.py`, then
   `tonofdevelopervoice.dataset.assemble` to rebuild `data/dataset/{train,eval}.jsonl`.
 
-The pilot dataset built by this session is small (87 train / 13 eval — see
-`docs/plans/tonofdevelopervoice-v1.md` T09's `## Log`) and was chosen deliberately small
-to prove the pipeline, not for a production-quality fine-tune. Scale it up (more real
-records collected, more synthetic pairs generated per
-`docs/research/training-approach.md`) before training the model this deployment serves.
+The T09 pilot dataset (87 train / 13 eval, built on the Mac) was superseded on
+2026-09-18 by a real-scale run directly on this host (T17): 5000 real commits collected
+across all five repos, 600 synthesized pairs (550 train / 50 eval) via the host's local
+`llama-server` OpenAI-compatible endpoint instead of subagent budget — see
+`docs/plans/tonofdevelopervoice-v1.md` T17's `## Log`. 600 is still a first-pass scale,
+not a production ceiling; growing it further (more of the ~4500 collected-but-unused
+records synthesized) remains a valid follow-up.
 
 ## 4. Train
 
@@ -51,30 +56,36 @@ writing the adapter to `training/output/`.
 
 ## 5. Evaluate (optional but recommended before serving)
 
-`docs/runbook-training.md` §6: generate `{source, model_output, reference}` triples by
-running the trained model over `data/dataset/eval.jsonl`'s inputs, then
-
-```
-python3 scripts/evaluate.py --eval-file <generated triples> \
-  --train-file data/dataset/train.jsonl --out data/dataset/eval_report.json
-```
+`docs/runbook-training.md` §6, in full: generate `{source, model_output, reference}`
+triples with `scripts/generate_eval_outputs.py`, filter the (usually rare) rows with an
+empty `output`, then score with `scripts/evaluate.py`. The `HF_HUB_DISABLE_XET=1
+HF_HUB_ENABLE_HF_TRANSFER=0` exports and `PYTHONPATH=src` prefix from that runbook's §5-6
+apply here too — this venv's package can't be `pip install -e .`-ed (Python 3.10 vs.
+`pyproject.toml`'s `requires-python = ">=3.11"`), and skipping the `HF_HUB_*` exports
+risks the same silent-stall downloader bug documented there.
 
 ## 6. Serve the CLI and web form against the real model
 
 Set `TONOFDEVELOPERVOICE_MODEL_DIR` to the trained adapter's path
 (`tonofdevelopervoice.serve.factory.default_backend` picks `UnslothInferenceBackend` over
-the stub when this is set — no source change needed):
+the stub when this is set — no source change needed). `flask` also needs installing into
+this venv if training/evaluation deps only were installed per `runbook-training.md` §3 —
+the web form's process needs both it and the real backend:
 
 ```
 export TONOFDEVELOPERVOICE_MODEL_DIR=training/output
+export HF_HUB_DISABLE_XET=1
+export HF_HUB_ENABLE_HF_TRANSFER=0
+pip install flask  # only if not already installed in this venv
 ```
 
-CLI:
+CLI (`PYTHONPATH=src` needed for the same reason as step 5, since the CLI's own venv may
+be the py3.10 training one rather than the Mac's installed-package venv):
 
 ```
-python3 -m tonofdevelopervoice.cli --text "some AI-generated commit message"
-python3 -m tonofdevelopervoice.cli --file some_file.txt
-echo "some text" | python3 -m tonofdevelopervoice.cli
+PYTHONPATH=src python3 -m tonofdevelopervoice.cli --text "some AI-generated commit message"
+PYTHONPATH=src python3 -m tonofdevelopervoice.cli --file some_file.txt
+echo "some text" | PYTHONPATH=src python3 -m tonofdevelopervoice.cli
 ```
 
 Web form (development server — `flask.Flask.run`'s default; for anything longer-lived
@@ -83,17 +94,16 @@ than an ad hoc check, put a production WSGI server, e.g. `gunicorn`, in front of
 plan):
 
 ```
-python3 -m tonofdevelopervoice.web.app
+PYTHONPATH=src python3 -m tonofdevelopervoice.web.app
 ```
 
 Then open the printed URL (default `http://127.0.0.1:5000/`) — paste text on the left,
-the rewritten output appears on the right after submitting.
+the rewritten output appears on the right after submitting. Confirmed end-to-end on
+2026-09-18 (`docs/plans/tonofdevelopervoice-v1.md` T19's `## Log`): the CLI and web form
+both rewrote verbose AI-style paragraphs into terse, target-style one-liners against the
+real trained adapter.
 
-## What this session could not do
-
-Per `docs/plans/tonofdevelopervoice-v1.md` T17 (`[!] BLOCKED`): this session has no
-SSH/remote access to the 5090 host, so it never actually ran steps 4-6 above — it wrote
-the code, the config, and this runbook, and verified everything it could locally (unit
-tests, mocked-import construction/generation logic, the CLI/web form running against the
-stub backend). Running the real fine-tune, the real evaluation, and confirming the
-real-model-backed CLI/web form work end to end are the parts only the owner can do here.
+If a `llama-server` (or similar) process was already running on this host and got
+stopped to free VRAM for training (see T18/T19's log — this project's synthesis step in
+T17 also depends on that same server being up), restart it with whatever command started
+it originally before finishing up; this project doesn't own that process.

@@ -222,12 +222,21 @@ this session cannot reach directly.
   installed); regression tests added via a faked `transformers` module, gate green
   (95 tests, coverage floor 100% held). Also hit the same silent-stall pattern as
   T17/T18 fetching `roberta-large` via Unsloth/xet's downloader — same fix, disable it
-  (`HF_HUB_DISABLE_XET=1`). Final report (`data/dataset/eval_report.json`):
-  `content_similarity_mean=0.80`, `reference_fidelity_mean=0.85`,
-  `style_score_mean=0.71`, `style_classifier_accuracy=0.92` (the classifier that tells
+  (`HF_HUB_DISABLE_XET=1`). First run included 2/50 eval rows with an empty `output`
+  (upstream collection artifact, see follow-up note below), which dragged
+  `reference_fidelity`/`style_score` toward 0 for those two rows; filtered them out of
+  `eval_generated.jsonl` (-> `eval_generated_filtered.jsonl`, 48 rows) and re-scored
+  rather than retraining, since the defect is in 2 rows of eval data, not the model.
+  Final report (`data/dataset/eval_report.json`, n=48):
+  `content_similarity_mean=0.81`, `reference_fidelity_mean=0.89`,
+  `style_score_mean=0.72`, `style_classifier_accuracy=0.92` (the classifier that tells
   real pre-2021 style from AI-ish synthetic text is 92% accurate, and the fine-tuned
-  model's outputs score well against it), `perplexity_mean=61.6`, `judge_win_rate=null`
-  (no LLM-judge key configured, as decided in T15). Exercised the CLI and web form for
+  model's outputs score well against it), `perplexity_mean=63.0`, `judge_win_rate=null`
+  (no LLM-judge key configured, as decided in T15). Follow-up data-quality note:
+  `data/dataset/train.jsonl` also has 36/550 (6.5%) empty-`output` rows and 18/550
+  `input` rows leaking a stray code-fence the synthesis prompt should have suppressed —
+  not chased now (small enough not to be the eval story), worth filtering before any
+  larger synthesis run. Exercised the CLI and web form for
   real against `TONOFDEVELOPERVOICE_MODEL_DIR=training/output`: CLI rewrote a verbose
   AI-style paragraph to `"Authentication module improvements."`; the web form (real dev
   server, real POST) rewrote another to `"Caching improvements."` — both terse,
