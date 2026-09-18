@@ -1,5 +1,5 @@
 ---
-status: paused
+status: running
 created: 2026-09-18
 ---
 # tonofdevelopervoice v1: research + corpus/training pipeline + CLI/web form
@@ -81,6 +81,20 @@ this session cannot reach directly.
   to match.
 - Publishing model weights publicly (allowed by `docs/PROJECT.md` §5) is out of scope for
   this plan — nothing here uploads weights anywhere; that's a follow-up if wanted later.
+- The session resumed on 2026-09-18 runs *on* the 5090 host itself (hostname `Zver5090`,
+  confirmed via `nvidia-smi`/`uname`/`free -h`: RTX 5090 32GB, CUDA 12.8, driver 616.56,
+  78GB RAM, WSL2) — T17's original blocker ("no SSH/remote access") no longer applies, so
+  T17-T19 execute directly instead of via handoff.
+- `docs/PROJECT.md` §5 blocks "large-scale **re**-scraping ... of the already-collected
+  corpus" without approval. This host's `data/` is empty (gitignored, never synced from
+  the Mac) — collecting into it is a first run on this machine, not a re-scrape of an
+  existing corpus, so it proceeds unattended per the "large-scale scraping ... (using the
+  provided `GITHUB_TOKEN`)" row of the same table. The Mac's collected corpus is untouched.
+- Dataset synthesis (T09's "before" AI-ish text) uses the local `llama-server` already
+  running on this host (127.0.0.1:8080, OpenAI-compatible, a 27B GGUF model) instead of
+  delegating to subagents — it removes the "budget" ceiling T09 cited for staying at
+  87/13 records and is pure inference against an already-running process, no contention
+  with GPU training.
 - Verify commands for research tasks (T01-T06) check that the file exists and contains a
   `## Decision` (or `## Decision: <Topic>` for the summary) section, since a research
   write-up has no test suite of its own.
@@ -175,13 +189,54 @@ this session cannot reach directly.
       collection (if not already done)/training/`scripts/evaluate.py`/CLI/web form on that
       host — verify: `test -f docs/runbook-deploy.md && grep -q 'HF_TOKEN' docs/runbook-deploy.md && grep -q 'GITHUB_TOKEN' docs/runbook-deploy.md`
 
-- [!] BLOCKED (needs confirmation): T17 run the full fine-tune, `scripts/evaluate.py`,
-      and a live CLI/web-form check against the real trained model on the 5090 host — this
-      session has no SSH/remote access to that host (missing dependency), so this step
-      cannot be executed unattended; hand off `docs/runbook-training.md` and
-      `docs/runbook-deploy.md` to the user and stop here.
+- [!] BLOCKED (missing credential): T17 Collect + synthesize at real scale on the 5090
+      host: re-run `scripts/collect.py`/`scripts/build_manifest.py` for
+      linux/postgresql/nginx/apache/mysql into this host's (gitignored, empty) `data/`,
+      then synthesize AI-ish "before" text at real scale using the already-running local
+      `llama-server` OpenAI-compatible endpoint (127.0.0.1:8080) instead of subagent
+      budget, and rebuild `data/dataset/{train,eval}.jsonl` via
+      `tonofdevelopervoice.dataset.assemble` — `.env`'s `GITHUB_TOKEN` returns
+      `401 Bad credentials` from `https://api.github.com/user` directly (confirmed via curl,
+      not a code bug — `HF_TOKEN` in the same file checks out fine against
+      `huggingface.co/api/whoami-v2`); needs the owner to supply a working token — verify:
+      `test -f data/manifest.json && test -s data/dataset/train.jsonl && test -s data/dataset/eval.jsonl`
+
+- [!] BLOCKED (missing credential, depends on T17): T18 Run the real fine-tune on this
+      host per `docs/runbook-training.md` §3/§5 (`.venv-train` on native ext4,
+      `python3 training/train.py`), checked empirically against the GPU's actual free VRAM
+      (shared with a pre-existing `llama-server` process) before committing to the full
+      run — `training/train.py` reads `data/dataset/train.jsonl`/`eval.jsonl`, which T17
+      has not produced yet (blocked on the same bad `GITHUB_TOKEN`); the environment half
+      of this task (`.venv-train`, `torch` cu128, Unsloth deps) proceeds in parallel since
+      it needs no credential — verify: `test -d training/output`
+
+- [!] BLOCKED (missing credential, depends on T17/T18): T19 Run `scripts/evaluate.py` per
+      `docs/runbook-training.md` §6 and exercise the CLI and web form against the real
+      trained model via `TONOFDEVELOPERVOICE_MODEL_DIR` (`docs/runbook-deploy.md` §5-6) —
+      needs T18's trained adapter, which needs T17's dataset — verify:
+      `test -f data/dataset/eval_report.json`
 
 ## Log
+- 2026-09-18 (credential blocker): confirmed `GITHUB_TOKEN` invalid via a direct,
+  unauthenticated-of-the-app curl to `https://api.github.com/user` (`401 Bad credentials`,
+  not a code bug) — root cause per `/diagnose` discipline, not a retry. `HF_TOKEN` in the
+  same `.env` verified good against `huggingface.co/api/whoami-v2`. T17 marked
+  `[!] BLOCKED`; T18/T19 marked `[!] BLOCKED` transitively (both need T17's dataset).
+  Asked the owner for a replacement classic PAT (no scopes, or `public_repo`, needed for
+  public-repo read). Continuing everything that needs no GitHub credential: created
+  `~/.venvs/tonofdevelopervoice-main` (py3.14, installed `-e .` + dev group — used for
+  collect/dataset/evaluate/CLI/web, all currently green) and
+  `~/.venvs/tonofdevelopervoice-train` (py3.10 per Unsloth's supported range, native ext4
+  not `/mnt/c`); `pip install torch --index-url .../cu128` running there.
+- Resume 2026-09-18: session confirmed it is running on the 5090 host itself (`Zver5090`,
+  RTX 5090 32GB, CUDA 12.8, driver 616.56, 78GB/16GB swap RAM, WSL2 kernel
+  6.18.33.2-microsoft-standard-WSL2). `.env` present with `GITHUB_TOKEN`/`HF_TOKEN`.
+  `data/` does not exist on this host (gitignored, never synced) — needs fresh collection.
+  No `training/output` yet. GPU already has ~26.8GB/32.6GB VRAM held by a pre-existing,
+  unrelated `llama-server` process (`Qwen3.8-27B-Uncensored-Cyber-IQ4_XS`, up since
+  2026-09-16, OpenAI-compatible API on 127.0.0.1:8080) — leaves ~5.7GB free; per working
+  contract this process is not killed to free VRAM without asking. Split old T17 into
+  T17 (collect+synthesize)/T18 (train)/T19 (evaluate+serve); `status: running`.
 - Finish: T00-T16 all `[x]`, T17 `[!] BLOCKED` (no SSH/remote access to the 5090 host —
   missing dependency, per plan Decisions). Re-ran every AC once more from a clean gate
   pass: AC1-AC9 all pass (AC1 research summary, AC2 filter tests, AC3 pilot linux.jsonl,
