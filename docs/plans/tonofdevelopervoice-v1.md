@@ -197,7 +197,7 @@ this session cannot reach directly.
       `data/dataset/{train,eval}.jsonl` via `tonofdevelopervoice.dataset.assemble` — verify:
       `test -f data/manifest.json && test -s data/dataset/train.jsonl && test -s data/dataset/eval.jsonl`
 
-- [ ] T18 Run the real fine-tune on this host per `docs/runbook-training.md` §3/§5
+- [x] T18 Run the real fine-tune on this host per `docs/runbook-training.md` §3/§5
       (`.venv-train` on native ext4, `python3 training/train.py`), checked empirically
       against the GPU's actual free VRAM (shared with a pre-existing `llama-server`
       process) before committing to the full run — verify: `test -d training/output`
@@ -207,6 +207,33 @@ this session cannot reach directly.
       (`docs/runbook-deploy.md` §5-6) — verify: `test -f data/dataset/eval_report.json`
 
 ## Log
+- T18: real fine-tune ran on this host. Fixed two real bugs surfaced only by actually
+  running training here: (1) `training/train.py` imported `trl` before `unsloth`, so
+  Unsloth's memory/speed patches didn't fully apply — reordered per Unsloth's own
+  requirement; (2) running it writes `unsloth_compiled_cache/` (generated trainer code)
+  into the repo root, which `ruff check .`/`mypy .` then tried to lint/type-check
+  (~4800 errors) — gitignored (ruff respects `.gitignore`) and added to mypy's `exclude`.
+  Also found `torch` (installed from the cu128 index) and `torchvision` (installed from
+  plain PyPI by `pip install -r training/requirements.txt`) were ABI-mismatched
+  (`operator torchvision::nms does not exist`) — reinstalled torchvision from the same
+  cu128 index. At the owner's suggestion, stopped the host's pre-existing `llama-server`
+  process (was holding ~26.8GB/32.6GB VRAM for an unrelated model) for the training
+  window, freeing ~31GB; restartable with the exact command captured before stopping it.
+  Hit repeated silent stalls (same symptom class as T17's llama-server hang: an ESTAB TCP
+  connection with zero data flow, no exception) both fetching a chat completion earlier
+  and now downloading the base model via Unsloth's own "fast download"
+  (`unsloth_zoo.hf_xet_fallback`) path — it kept restarting the ~6GB weight file from 0
+  bytes, twice reaching 6.4GB/6.6GB before resetting. Root-caused to Unsloth's downloader
+  specifically (not general network: plain `curl`/pip installs were never affected) by
+  bypassing it — pre-fetched the same repo with plain `huggingface_hub.snapshot_download`
+  (`HF_HUB_DISABLE_XET=1`), which completed cleanly in ~20 min with zero resets. Wrote
+  `.claude/scratch/train_watchdog.sh` (kill+restart on a 90s stall) as a safety net for
+  future runs. Training then found the model already cached and completed in one pass:
+  105 steps (3 epochs, batch 4 x grad-accum 4 x 1 GPU = 16), `train_loss=1.36`,
+  final `eval_loss=1.435`, LoRA adapter saved to `training/output/`
+  (`adapter_model.safetensors`, ~175MB, r=16/alpha=32 per `training/config.yaml`). No
+  OOM: peak VRAM use stayed well under the freed ~31GB for this 8B-4bit/LoRA/seq_len-1024
+  config. Gate green throughout (unrelated to training/ which stays gate-excluded).
 - T17: collected 1000 records/repo (5000 total, `data/manifest.json`) via
   `scripts/collect.py`'s GitHub-API pipeline (same bounded approach as T07/T08) once the
   `.env` quote-stripping fix unblocked `GITHUB_TOKEN`. Wrote `scripts/synthesize.py`:
