@@ -1,5 +1,5 @@
 ---
-status: running
+status: done
 created: 2026-09-18
 ---
 # tonofdevelopervoice v1: research + corpus/training pipeline + CLI/web form
@@ -202,11 +202,42 @@ this session cannot reach directly.
       against the GPU's actual free VRAM (shared with a pre-existing `llama-server`
       process) before committing to the full run — verify: `test -d training/output`
 
-- [ ] T19 Run `scripts/evaluate.py` per `docs/runbook-training.md` §6 and exercise the CLI
+- [x] T19 Run `scripts/evaluate.py` per `docs/runbook-training.md` §6 and exercise the CLI
       and web form against the real trained model via `TONOFDEVELOPERVOICE_MODEL_DIR`
       (`docs/runbook-deploy.md` §5-6) — verify: `test -f data/dataset/eval_report.json`
 
 ## Log
+- T19: wrote `scripts/generate_eval_outputs.py` (missing from the repo despite the
+  runbook describing this exact step) to run the real trained model
+  (`UnslothInferenceBackend("training/output")`) over `data/dataset/eval.jsonl`'s 50
+  inputs, producing `data/dataset/eval_generated.jsonl`'s `{source, model_output,
+  reference}` triples — 50/50 generated, 0 failures. Running `scripts/evaluate.py` for
+  the first time anywhere (T15 only unit-tested it against mocked imports) surfaced a
+  real upstream incompatibility: `bert-score==0.3.13` (latest release) calls
+  `RobertaTokenizer.build_inputs_with_special_tokens()`, which `transformers==5.5.0`
+  removed from that class's public API (confirmed by inspecting the installed class
+  directly) — `tonofdevelopervoice.evaluate.reference_scorer` now restores that method
+  (standard `<s> ids </s>` wrapping) only when it's actually missing and only if
+  `transformers` is importable at all (a no-op on the Mac side, which has neither
+  installed); regression tests added via a faked `transformers` module, gate green
+  (95 tests, coverage floor 100% held). Also hit the same silent-stall pattern as
+  T17/T18 fetching `roberta-large` via Unsloth/xet's downloader — same fix, disable it
+  (`HF_HUB_DISABLE_XET=1`). Final report (`data/dataset/eval_report.json`):
+  `content_similarity_mean=0.80`, `reference_fidelity_mean=0.85`,
+  `style_score_mean=0.71`, `style_classifier_accuracy=0.92` (the classifier that tells
+  real pre-2021 style from AI-ish synthetic text is 92% accurate, and the fine-tuned
+  model's outputs score well against it), `perplexity_mean=61.6`, `judge_win_rate=null`
+  (no LLM-judge key configured, as decided in T15). Exercised the CLI and web form for
+  real against `TONOFDEVELOPERVOICE_MODEL_DIR=training/output`: CLI rewrote a verbose
+  AI-style paragraph to `"Authentication module improvements."`; the web form (real dev
+  server, real POST) rewrote another to `"Caching improvements."` — both terse,
+  matching the target style, confirming AC6/AC7 hold against the real model, not just
+  the stub. Installed `flask` into `.venvs/tonofdevelopervoice-train` (only in the Mac
+  venv's deps before now) since the web form's process also needs the real backend.
+  Restarted the owner's `llama-server` afterward (stopped for T18's VRAM headroom, per
+  his message) — confirmed serving again on 127.0.0.1:8080 before finishing. All AC1-AC9
+  hold against the real model now, not just the stub; `docs/plans/tonofdevelopervoice-v1.md`
+  has no more `[ ]`/`[!]` tasks.
 - T18: real fine-tune ran on this host. Fixed two real bugs surfaced only by actually
   running training here: (1) `training/train.py` imported `trl` before `unsloth`, so
   Unsloth's memory/speed patches didn't fully apply — reordered per Unsloth's own
