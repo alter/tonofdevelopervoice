@@ -103,17 +103,17 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
       DPO/ORPO/instruction-tuning), and what shape the dataset needs to take as a result;
       write `docs/research/training-approach.md` with a `## Decision` — verify: `test -f docs/research/training-approach.md && grep -q '^## Decision' docs/research/training-approach.md`
 
-- [ ] T04 Research data-collection approaches (GH Archive/BigQuery public dataset, GitHub
+- [x] T04 Research data-collection approaches (GH Archive/BigQuery public dataset, GitHub
       REST/GraphQL API, plain `git log` mining, existing public commit-message datasets)
       and concrete techniques for the pre-2021 cutoff and AI-co-author-trailer exclusion;
       write `docs/research/data-collection.md` with a `## Decision` — verify: `test -f docs/research/data-collection.md && grep -q '^## Decision' docs/research/data-collection.md`
 
-- [ ] T05 Research evaluation methodology for style-transfer quality (embedding similarity,
+- [x] T05 Research evaluation methodology for style-transfer quality (embedding similarity,
       perplexity, or other automated metrics against a held-out real corpus, per the
       "automated metric" decision); write `docs/research/evaluation.md` with a `## Decision`
       naming the concrete metric and tooling — verify: `test -f docs/research/evaluation.md && grep -q '^## Decision' docs/research/evaluation.md`
 
-- [ ] T06 Synthesize T01-T05 into `docs/research/SUMMARY.md`: one `## Decision: <Topic>`
+- [x] T06 Synthesize T01-T05 into `docs/research/SUMMARY.md`: one `## Decision: <Topic>`
       section per framework/base model/training approach/data collection/evaluation,
       cross-referencing the source files; this is what Part 2 tasks read — verify: `test -f docs/research/SUMMARY.md && grep -Eq '^## Decision: (Framework|Base model|Training approach|Data collection|Evaluation)' docs/research/SUMMARY.md`
 
@@ -169,3 +169,4 @@ confirmation. Training/real inference execute on a separate Ubuntu-under-WSL2 ho
 
 ## Log
 - T00: uv-managed venv (CPython 3.13.7), pyproject.toml (ruff+mypy strict+pytest+pytest-cov), src/tonofdevelopervoice package, scripts/coverage_gate.py, one scaffolding test. Baseline: ruff/mypy/pytest all clean pre-existing (fresh repo, nothing to break); coverage floor set to 100.00% (trivial __init__.py, single covered line) via `.coverage-gate.json`. Gitignored .coverage/coverage.xml/.pytest_cache/.ruff_cache/.mypy_cache.
+- T01-T06 (Part 1 research, delegated to web-researcher/researcher subagents, one doc per topic): frameworks.md (Unsloth over Soup — Soup's recent silent-correctness bug history), base-models.md (Qwen3-8B-Base, fallback Mistral-3-8B), training-approach.md (SFT on LLM-synthesized paired data, STRAP-style, not plain LM continuation or standalone DPO), data-collection.md (git clone+log mining primary, GitHub GraphQL API for PR text secondary, GH Archive/BigQuery skipped), evaluation.md (6-part automated report: MiniLM similarity, BERTScore, validated style classifier, GPT-2 perplexity, forced-choice LLM-judge, optional MAUVE), SUMMARY.md consolidating all five with one `## Decision: <Topic>` each. PROJECT.md/AGENTS.md updated for the Soup->Unsloth pivot. All research verify commands green (file exists + `## Decision` section present).
