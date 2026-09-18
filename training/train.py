@@ -6,12 +6,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from tonofdevelopervoice.serve.prompts import PROMPT_PREFIX_TEMPLATE  # noqa: E402
 from tonofdevelopervoice.train.config import TrainingConfig, load_training_config  # noqa: E402
-
-PROMPT_TEMPLATE = (
-    "Rewrite the following text in terse, authentic open-source engineering "
-    "commit/PR style, preserving its meaning:\n\n{input}\n\n### Rewritten:\n{output}"
-)
 
 LORA_TARGET_MODULES = [
     "q_proj",
@@ -35,7 +31,8 @@ def load_dataset_jsonl(path: str) -> Any:
 
 
 def format_example(example: dict[str, str]) -> dict[str, str]:
-    return {"text": PROMPT_TEMPLATE.format(input=example["input"], output=example["output"])}
+    prompt = PROMPT_PREFIX_TEMPLATE.format(input=example["input"])
+    return {"text": prompt + example["output"]}
 
 
 def train(config: TrainingConfig) -> None:
