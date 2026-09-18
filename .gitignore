@@ -1,2 +1,22 @@
 .env
 .pyc
+__pycache__/
+*.egg-info/
+.venv/
+.coverage
+coverage.xml
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.claude/scratch/
+.claude/plan-pause
+
+# large ML artifacts — corpus and trained model weights never go into git
+data/
+corpus/
+models/
+checkpoints/
+*.ckpt
+*.safetensors
+*.gguf
