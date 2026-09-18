@@ -81,6 +81,11 @@ this session cannot reach directly.
   to match.
 - Publishing model weights publicly (allowed by `docs/PROJECT.md` §5) is out of scope for
   this plan — nothing here uploads weights anywhere; that's a follow-up if wanted later.
+  Superseded 2026-09-18 by a direct owner request: `training/output/`'s final adapter
+  (not the per-epoch `checkpoint-*/` subdirs) is now committed via Git LFS
+  (`*.safetensors` tracked in `.gitattributes`) and pushed to the public
+  `origin/main` — already authorized unattended per `docs/PROJECT.md` §5's "publishing
+  trained model weights" row.
 - The session resumed on 2026-09-18 runs *on* the 5090 host itself (hostname `Zver5090`,
   confirmed via `nvidia-smi`/`uname`/`free -h`: RTX 5090 32GB, CUDA 12.8, driver 616.56,
   78GB RAM, WSL2) — T17's original blocker ("no SSH/remote access") no longer applies, so

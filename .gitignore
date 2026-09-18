@@ -12,13 +12,14 @@ coverage.xml
 .claude/scratch/
 .claude/plan-pause
 
-# large ML artifacts — corpus and trained model weights never go into git
+# large ML artifacts — corpus stays local; the final adapter is committed via Git LFS
+# (docs/PROJECT.md §5 already authorizes publishing weights; intermediate checkpoints
+# from training/train.py are not published, only the final adapter in training/output/)
 data/
 corpus/
 models/
-training/output/
+training/output/checkpoint-*/
 checkpoints/
 *.ckpt
-*.safetensors
 *.gguf
 unsloth_compiled_cache/
