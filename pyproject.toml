@@ -4,7 +4,7 @@ name = "tonofdevelopervoice"
 version = "0.1.0"
 description = "Rewrite AI-generated commit/PR text into authentic pre-2021 engineering style"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["pyyaml"]
 
 [dependency-groups]
 dev = [
@@ -12,6 +12,7 @@ dev = [
     "mypy",
     "pytest",
     "pytest-cov",
+    "types-pyyaml",
 ]
 
 [tool.ruff]
@@ -25,6 +26,7 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.11"
 strict = true
 files = ["src", "tests", "scripts"]
+exclude = ["^training/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
