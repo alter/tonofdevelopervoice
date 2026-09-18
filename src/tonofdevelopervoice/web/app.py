@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, render_template_string, request
 
-from tonofdevelopervoice.serve.backend import InferenceBackend
+from tonofdevelopervoice.serve.backend import InferenceBackend, StubInferenceBackend
 from tonofdevelopervoice.serve.factory import default_backend
 
 PAGE_TEMPLATE = """
@@ -9,6 +9,12 @@ PAGE_TEMPLATE = """
 <html>
 <head><title>tonofdevelopervoice</title></head>
 <body>
+{% if using_stub %}
+<p style="color: #900; font-weight: bold;">
+  WARNING: TONOFDEVELOPERVOICE_MODEL_DIR is not set — this is the stub backend, it
+  returns your input essentially unchanged, not the real model.
+</p>
+{% endif %}
 <form method="post">
   <div style="display:flex; gap:1em;">
     <textarea name="input_text" rows="24" cols="60"
@@ -26,6 +32,7 @@ PAGE_TEMPLATE = """
 def create_app(backend: InferenceBackend | None = None) -> Flask:
     app = Flask(__name__)
     app.config["BACKEND"] = backend or default_backend()
+    using_stub = isinstance(app.config["BACKEND"], StubInferenceBackend)
 
     @app.route("/", methods=["GET", "POST"])
     def index() -> str:
@@ -36,7 +43,10 @@ def create_app(backend: InferenceBackend | None = None) -> Flask:
             if input_text.strip():
                 output_text = app.config["BACKEND"].rewrite(input_text)
         return render_template_string(
-            PAGE_TEMPLATE, input_text=input_text, output_text=output_text
+            PAGE_TEMPLATE,
+            input_text=input_text,
+            output_text=output_text,
+            using_stub=using_stub,
         )
 
     return app

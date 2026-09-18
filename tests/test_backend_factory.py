@@ -18,6 +18,14 @@ def test_default_backend_returns_stub_when_env_var_unset(
     assert isinstance(backend, StubInferenceBackend)
 
 
+def test_default_backend_warns_on_stderr_when_env_var_unset(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("TONOFDEVELOPERVOICE_MODEL_DIR", raising=False)
+    default_backend()
+    assert "TONOFDEVELOPERVOICE_MODEL_DIR" in capsys.readouterr().err
+
+
 @pytest.fixture
 def fake_unsloth() -> Generator[MagicMock, None, None]:
     fake_model = MagicMock()
@@ -51,3 +59,13 @@ def test_default_backend_returns_unsloth_backend_when_env_var_set(
     assert isinstance(backend, UnslothInferenceBackend)
     _, kwargs = fake_unsloth.from_pretrained.call_args
     assert kwargs["model_name"] == "training/output"
+
+
+def test_default_backend_does_not_warn_when_env_var_set(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_unsloth: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("TONOFDEVELOPERVOICE_MODEL_DIR", "training/output")
+    default_backend()
+    assert capsys.readouterr().err == ""

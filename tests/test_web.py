@@ -49,3 +49,22 @@ def test_main_starts_the_dev_server() -> None:
     with patch("flask.Flask.run") as mock_run:
         main()
     mock_run.assert_called_once()
+
+
+def test_stub_backend_shows_warning_banner() -> None:
+    client = make_client()
+    response = client.get("/")
+    body = response.get_data(as_text=True)
+    assert "TONOFDEVELOPERVOICE_MODEL_DIR" in body
+
+
+def test_non_stub_backend_shows_no_warning_banner() -> None:
+    class FakeRealBackend:
+        def rewrite(self, text: str) -> str:
+            return text
+
+    app = create_app(FakeRealBackend())
+    app.config["TESTING"] = True
+    response = app.test_client().get("/")
+    body = response.get_data(as_text=True)
+    assert "TONOFDEVELOPERVOICE_MODEL_DIR" not in body
