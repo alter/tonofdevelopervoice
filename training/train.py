@@ -6,6 +6,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from tonofdevelopervoice.env import load_dotenv  # noqa: E402
 from tonofdevelopervoice.serve.prompts import PROMPT_PREFIX_TEMPLATE  # noqa: E402
 from tonofdevelopervoice.train.config import TrainingConfig, load_training_config  # noqa: E402
 
@@ -82,4 +83,5 @@ def train(config: TrainingConfig) -> None:
 
 
 if __name__ == "__main__":
+    load_dotenv()
     train(load_training_config(Path("training/config.yaml")))
