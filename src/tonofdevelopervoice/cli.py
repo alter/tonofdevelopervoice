@@ -3,7 +3,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from tonofdevelopervoice.serve.backend import InferenceBackend, StubInferenceBackend
+from tonofdevelopervoice.serve.backend import InferenceBackend
+from tonofdevelopervoice.serve.factory import default_backend
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,7 +48,7 @@ def run(argv: list[str], backend: InferenceBackend) -> int:
 
 
 def main() -> int:
-    return run(sys.argv[1:], StubInferenceBackend())
+    return run(sys.argv[1:], default_backend())
 
 
 if __name__ == "__main__":

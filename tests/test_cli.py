@@ -56,6 +56,7 @@ def test_cli_errors_on_empty_input(capsys: pytest.CaptureFixture[str]) -> None:
 def test_main_uses_stub_backend_and_argv(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    monkeypatch.delenv("TONOFDEVELOPERVOICE_MODEL_DIR", raising=False)
     monkeypatch.setattr("sys.argv", ["tonofdevelopervoice", "--text", "fix bug"])
     exit_code = main()
     captured = capsys.readouterr()

@@ -1,7 +1,8 @@
 # app.py
 from flask import Flask, render_template_string, request
 
-from tonofdevelopervoice.serve.backend import InferenceBackend, StubInferenceBackend
+from tonofdevelopervoice.serve.backend import InferenceBackend
+from tonofdevelopervoice.serve.factory import default_backend
 
 PAGE_TEMPLATE = """
 <!doctype html>
@@ -24,7 +25,7 @@ PAGE_TEMPLATE = """
 
 def create_app(backend: InferenceBackend | None = None) -> Flask:
     app = Flask(__name__)
-    app.config["BACKEND"] = backend or StubInferenceBackend()
+    app.config["BACKEND"] = backend or default_backend()
 
     @app.route("/", methods=["GET", "POST"])
     def index() -> str:
