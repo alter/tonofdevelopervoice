@@ -18,7 +18,7 @@ Single source of truth for what this project is, what it contains, and what the 
 
 | Question | Answer |
 |---|---|
-| What must work end to end first | Full-scale corpus collection first: mine commit and PR text from major long-lived OSS repos (linux, postgresql, nginx, apache, oracle, and other large projects), restricted to content dated **before 2021**, with any entry containing an AI co-author trailer (`Co-authored-by: <AI agent name>` — Claude/Opus/Sonnet/GPT/ChatGPT/Grok/DeepSeek/etc.) excluded. Then fine-tune a model on that corpus (via Soup, on the RTX 5090 host) to rewrite AI-generated commit/PR text into terse, idiomatic, engineering-style prose — matching the vocabulary, tone and concision of real pre-2021 OSS commit/PR text. Ship both a CLI (accepts text or a file, prints rewritten text to stdout) and a primitive two-panel web form (paste text left, get rewritten text right, no accounts) in v1. |
+| What must work end to end first | Full-scale corpus collection first: mine commit and PR text from major long-lived OSS repos (linux, postgresql, nginx, apache, oracle, and other large projects), restricted to content dated **before 2021**, with any entry containing an AI co-author trailer (`Co-authored-by: <AI agent name>` — Claude/Opus/Sonnet/GPT/ChatGPT/Grok/DeepSeek/etc.) excluded. Then fine-tune a model on that corpus (via Unsloth, on the RTX 5090 host) to rewrite AI-generated commit/PR text into terse, idiomatic, engineering-style prose — matching the vocabulary, tone and concision of real pre-2021 OSS commit/PR text. Ship both a CLI (accepts text or a file, prints rewritten text to stdout) and a primitive two-panel web form (paste text left, get rewritten text right, no accounts) in v1. |
 | What the first version must NOT do | No MCP server yet (explicitly deferred to a later version — CLI + web form only for v1). No accounts/auth, no payments, no admin panel, no notifications. Do not widen the corpus beyond pre-2021, non-AI-co-authored commit/PR text without a direct request. |
 
 ## 3. Capability ledger
@@ -32,11 +32,14 @@ One state per row: `included` (present, expected to work) · `available` (partly
 | File uploads | available | CLI accepts a local file path as input; the web form is paste-only text (no file upload) in v1 |
 | Payments | absent | |
 | Admin / roles | absent | |
-| External integrations | included | GitHub (git clone + GitHub REST API using `GITHUB_TOKEN` from `.env` for PR metadata / co-author filtering); Soup (fine-tuning CLI/toolkit) for the training step; possibly HuggingFace Hub if/when weights are published |
+| External integrations | included | GitHub (git clone + GitHub REST API using `GITHUB_TOKEN` from `.env` for PR metadata / co-author filtering); Unsloth (fine-tuning framework) for the training step; Hugging Face Hub as the transport for trained weights and evaluation sets (`tasks/DECISIONS.md` D8) |
 | Background jobs / scheduling | included | Large-scale scraping and training runs are long-running, unattended jobs |
 | Notifications (email, push, messaging) | absent | |
 | Real-time | absent | |
 | MCP server | absent (deferred) | Explicitly out of scope for v1; add on direct request in a later plan |
+| PR text collection | included | Merged PRs created before 2021, via the GitHub REST API (`tasks/20-corpus/02-pr-collector`) |
+| On-device inference (Apple Silicon) | included | MLX 4-bit, loaded in process — no CUDA path on the Mac (`tasks/DECISIONS.md` D1) |
+| AI-written commit/PR text collection | available | Evaluation inputs only; never enters a training file (`tasks/DECISIONS.md` D3) |
 
 ## 4. Decided by the agent — never asked
 
@@ -51,7 +54,7 @@ Defaults; extend per project. The agent makes these calls, records them under a 
 - Which docs to update when behavior, contracts, setup or operations change.
 - Exact corpus filtering heuristics (regex/parsing rules for date cutoff and AI co-author trailer exclusion), as long as the stated exclusion goal is met.
 - Corpus storage format and on-disk layout (e.g. JSONL/Parquet, directory structure), as long as it is reproducible and excluded from git.
-- Choice of base model and Soup training recipe details within the stated compute envelope (Mac for dev/pipeline, RTX 5090 host for real training runs).
+- Choice of base model and Unsloth training recipe details within the stated compute envelope (Mac for dev/pipeline, RTX 5090 host for real training runs).
 - Which specific large OSS repos beyond the four named (linux, postgresql, nginx, apache) go into the corpus, as long as they are large, long-lived, and have pre-2021 history available.
 
 ## 5. Unattended policy
@@ -67,6 +70,11 @@ Defaults; extend per project. The agent makes these calls, records them under a 
 | publishing trained model weights (e.g. to HuggingFace) | |
 
 Note: the last three rows (training runs, public deployment, publishing weights) were explicitly authorized to run unattended in the intake interview — only re-scraping/deleting the corpus requires approval first.
+
+Note (2026-09-19): the v1 corpus copied and rewrote AI-style text on a mismeasured
+premise (`docs/audit-2026-09-19.md`), so the owner approved a new collection into
+`data/raw_v2/`, `data/clean_v2/`, `data/dataset_v2/` (`tasks/DECISIONS.md` D2). This is
+that approval — `data/raw/` and `data/dataset/` (v1) are not deleted or overwritten by it.
 
 ## 6. Gate checks
 
@@ -122,3 +130,4 @@ Read before working in the area. Prefer `.claude/rules/<area>.md` with `paths:` 
 |---|---|
 | Repository conventions, stack, setup | `AGENTS.md` |
 | Task list / execution plan | `docs/plans/<slug>.md` (created by `/plan`) |
+| v2-rebuild task tree (goal, decisions, per-task work) | `tasks/README.md`, `tasks/PROTOCOL.md`, `tasks/GOAL.md`, `tasks/DECISIONS.md` |

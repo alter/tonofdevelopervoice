@@ -15,6 +15,9 @@ Shared instructions for every coding agent in this repository. `CLAUDE.md` impor
 - `docs/PROJECT.md` owns scope, the capability ledger, decisions the agent makes alone, the unattended policy and the gate checks. Read it first. A capability with no ledger row is `absent`; dormant code or an old doc is not a requirement.
 - `docs/plans/<slug>.md` owns the current task list. Work from it; update it; never delete tasks.
 - Runbooks in `docs/` own setup and operations. Verify against code, scripts and runtime output rather than trusting a stale doc; update the doc when behavior, contracts, setup or operations change.
+- New work lives in `tasks/` (goal, decisions and per-task work for the v2 rebuild —
+  `tasks/README.md`, `PROTOCOL.md`, `GOAL.md`, `DECISIONS.md`); `docs/plans/tonofdevelopervoice-v1.md`
+  is closed history, kept for its `## Log`.
 
 ## Engineering
 
