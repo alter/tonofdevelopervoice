@@ -53,6 +53,69 @@ def test_fetch_with_retries_returns_the_first_successful_result() -> None:
     assert result == "ok"
 
 
+def _secondary_rate_limit_error(retry_after: str | None = None) -> urllib.error.HTTPError:
+    import io
+
+    headers = Message()
+    if retry_after is not None:
+        headers["retry-after"] = retry_after
+    body = (
+        b'{"message": "You have exceeded a secondary rate limit. Please wait a few '
+        b'minutes before you try again.", "documentation_url": "https://docs.github.com"}'
+    )
+    return urllib.error.HTTPError(
+        url="https://api.github.com",
+        code=403,
+        msg="secondary rate limit",
+        hdrs=headers,
+        fp=io.BytesIO(body),
+    )
+
+
+def test_fetch_with_retries_sleeps_for_the_retry_after_header_on_a_secondary_rate_limit() -> None:
+    call_count = 0
+
+    def flaky(_request: Any) -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise _secondary_rate_limit_error(retry_after="30")
+        return "ok"
+
+    sleep_calls: list[float] = []
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        result = fetch_with_retries(executor, REQUEST, fetch=flaky, sleep=sleep_calls.append)
+    assert result == "ok"
+    assert sleep_calls == [30.0]
+
+
+def test_fetch_with_retries_sleeps_a_default_on_a_secondary_rate_limit_without_retry_after() -> (
+    None
+):
+    call_count = 0
+
+    def flaky(_request: Any) -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise _secondary_rate_limit_error()
+        return "ok"
+
+    sleep_calls: list[float] = []
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        result = fetch_with_retries(executor, REQUEST, fetch=flaky, sleep=sleep_calls.append)
+    assert result == "ok"
+    assert sleep_calls == [60.0]
+
+
+def test_fetch_with_retries_does_not_retry_a_403_that_is_not_a_rate_limit() -> None:
+    def forbidden(_request: Any) -> str:
+        raise _http_error(403)
+
+    with ThreadPoolExecutor(max_workers=2) as executor, pytest.raises(RuntimeError, match="403"):
+        fetch_with_retries(executor, REQUEST, fetch=forbidden, sleep=lambda _s: None)
+
+
 def test_fetch_with_retries_sleeps_and_retries_after_rate_limit() -> None:
     call_count = 0
 

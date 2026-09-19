@@ -1,5 +1,6 @@
 # http_retry.py
 import http.client
+import json
 import time
 import urllib.error
 import urllib.request
@@ -20,6 +21,25 @@ def rate_limit_wait_seconds(exc: urllib.error.HTTPError) -> float:
     if reset_at is None:
         return 60.0
     return max(0.0, float(reset_at) - time.time())
+
+
+def is_secondary_rate_limited(exc: urllib.error.HTTPError) -> bool:
+    if exc.code != 403:
+        return False
+    if exc.headers.get("retry-after") is not None:
+        return True
+    try:
+        message = json.loads(exc.read()).get("message", "")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return "secondary rate limit" in str(message).lower()
+
+
+def secondary_rate_limit_wait_seconds(exc: urllib.error.HTTPError) -> float:
+    retry_after = exc.headers.get("retry-after")
+    if retry_after is None:
+        return 60.0
+    return float(retry_after)
 
 
 def fetch_with_retries(
@@ -45,6 +65,9 @@ def fetch_with_retries(
         except urllib.error.HTTPError as exc:
             if is_rate_limited(exc):
                 sleep(rate_limit_wait_seconds(exc))
+                continue
+            if is_secondary_rate_limited(exc):
+                sleep(secondary_rate_limit_wait_seconds(exc))
                 continue
             if 500 <= exc.code < 600 and transient_attempts < max_transient_attempts:
                 transient_attempts += 1
