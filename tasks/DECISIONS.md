@@ -113,7 +113,7 @@ rules out for `data/`). `scp`/`rsync` between hosts (no SSH path exists between 
 Mac and HOST sessions, `docs/plans/tonofdevelopervoice-v1.md:325` — though the owner could
 set this up by hand outside any task; not relied on here since it isn't in place).
 
-## D9. `HF_TOKEN` in `.env` is read-only; every Hub upload is blocked until it is replaced — 2026-09-19 [agent, found, not decided]
+## D9. `HF_TOKEN` in `.env` is read-only; every Hub upload is blocked until it is replaced — 2026-09-19 [agent, found, not decided] — RESOLVED same day
 
 **Found, not a decision to record and move past** — a live blocker for D8. Checked the same
 way `GITHUB_TOKEN` was checked (`load_dotenv()` + a real API call, never trusting an
@@ -131,3 +131,11 @@ wanted for downloads elsewhere. Until then, any task whose OUTCOME needs a Hub u
 `10-serving/01-merged-export`, `10-serving/02-mlx-conversion`) stops at that step with
 `[!] BLOCKED: missing a write-scoped HF_TOKEN` — this is a missing credential per
 `tasks/PROTOCOL.md` §6, not something to work around.
+
+**Resolved 2026-09-19.** Owner replaced `HF_TOKEN` in `.env`. Re-checked the same way
+(never trusting the shell): `role: "write"`. `20-corpus/04-ai-eval-inputs` uploaded to
+`alterpub/tonofdevelopervoice-eval-sets` (private) and verified by downloading into a
+clean directory and comparing sha256 — both matched. Still applies to
+`20-corpus/02-pr-collector` (corpus not fully collected yet) and to
+`10-serving/01-merged-export` / `10-serving/02-mlx-conversion` (not started) only in the
+sense that they have not yet used the new token, not because it is expected to fail.

@@ -130,10 +130,25 @@ Both `--commit-target 300` / `--pr-target 200` caps were hit exactly, meaning de
 exceeded supply at every agent query — the pool of eligible real AI-written text is not
 the bottleneck here.
 
+## Hub upload (2026-09-19, unblocked)
+
+Owner replaced `HF_TOKEN` in `.env`; re-verified the same way (never trusting the shell)
+via `load_dotenv()` + `GET /api/whoami-v2`: `role: "write"`, `displayName: "WriteToken"`,
+created minutes earlier. `tasks/DECISIONS.md` D9 no longer applies.
+
+- `hf repo create alterpub/tonofdevelopervoice-eval-sets --type dataset --private --exist-ok`
+  → `https://huggingface.co/datasets/alterpub/tonofdevelopervoice-eval-sets`.
+- `hf upload alterpub/tonofdevelopervoice-eval-sets <scratch dir with only ai_commits.jsonl,
+  ai_prs.jsonl, MANIFEST.json> . --repo-type dataset` → commit
+  `a88663b42211054f67af5e48251709e858fc14b2`. `owner/` and `owner_v1_outputs/` were never
+  copied into the upload staging directory, so they cannot have been uploaded.
+- Verified from a clean state, not trusted: downloaded both files into a fresh scratch
+  directory (`hf download ... --local-dir`) and compared sha256 against the local copies
+  — both matched exactly (`6ee36029...` and `2aaef6dd...`, same as `MANIFEST.json`).
+
 ## Status
 
-`labels.txt` set to `status:blocked` (`BLOCKED.md` in this directory): every locally
-verifiable part of `OUTCOME` is done — both files exist with the right counts, dates,
-caps, and no leaked markers; gate green; reverse control done. Only the Hub upload
-(needed so HOST can fetch this without going through the Mac) is blocked, on a missing
-write-scoped `HF_TOKEN` (`tasks/DECISIONS.md` D9) — not something to work around.
+`labels.txt` set to `status:done`: `OUTCOME` now fully exists —
+`data/eval_real/ai_commits.jsonl` (300 ≥ 250), `ai_prs.jsonl` (200 ≥ 150), and the Hub
+dataset commit above, all verified from a clean state. `verify:passed` is left for
+`/verify` (another context), per `tasks/PROTOCOL.md` §5.
