@@ -41,7 +41,7 @@ def load_candidates(path: Path) -> list[dict[str, Any]]:
         return []
     seen: set[str] = set()
     records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").split("\n"):
         if not line.strip():
             continue
         record = json.loads(line)

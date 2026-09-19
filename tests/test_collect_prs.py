@@ -77,6 +77,30 @@ def test_load_candidates_returns_empty_list_when_file_is_missing(tmp_path: Path)
     assert load_candidates(tmp_path / "missing.jsonl") == []
 
 
+def test_load_candidates_survives_a_unicode_line_separator_inside_a_field(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "candidates.jsonl"
+    text_with_u2028 = "line one" + chr(0x2028) + "line two"
+    record_with_u2028 = {
+        "id": "repo#1",
+        "author_date": "2019-01-01T00:00:00Z",
+        "author_hash": "a",
+        "text": text_with_u2028,
+    }
+    other = {"id": "repo#2", "author_date": "2019-02-01T00:00:00Z", "author_hash": "b"}
+    path.write_text(
+        json.dumps(record_with_u2028, ensure_ascii=False)
+        + "\n"
+        + json.dumps(other, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+    records = load_candidates(path)
+    assert [r["id"] for r in records] == ["repo#1", "repo#2"]
+    assert records[0]["text"] == text_with_u2028
+
+
 def test_load_candidates_deduplicates_by_id_keeping_the_first_occurrence(
     tmp_path: Path,
 ) -> None:
