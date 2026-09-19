@@ -19,13 +19,13 @@ def test_load_dotenv_sets_new_vars_and_skips_comments(tmp_path: Path) -> None:
         os.environ.pop("BAZ_TEST_VAR", None)
 
 
-def test_load_dotenv_does_not_override_existing_env(tmp_path: Path) -> None:
+def test_load_dotenv_overrides_an_already_exported_env_var(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text("EXISTING_TEST_VAR=fromfile\n")
-    os.environ["EXISTING_TEST_VAR"] = "fromenv"
+    os.environ["EXISTING_TEST_VAR"] = "fromshell"
     try:
         load_dotenv(env_file)
-        assert os.environ["EXISTING_TEST_VAR"] == "fromenv"
+        assert os.environ["EXISTING_TEST_VAR"] == "fromfile"
     finally:
         os.environ.pop("EXISTING_TEST_VAR", None)
 
