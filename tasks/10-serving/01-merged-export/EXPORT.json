@@ -1,0 +1,40 @@
+{
+  "adapter_dir": "training/output",
+  "adapter_sha256": "c8981da24b84713c411dc32d1174b1da7f391ffb20b2c287d76853e63d0ba5e4",
+  "base_repo_id": "Qwen/Qwen3-8B-Base",
+  "base_commit": "49e3418fbbbca6ecbdf9608b4d22e5a407081db4",
+  "self_check": {
+    "prompt_source": "data/dataset/eval.jsonl",
+    "max_adapter_minus_merged": 0.0390625,
+    "max_base_minus_merged": 19.73828125
+  },
+  "written_files": {
+    "config.json": {
+      "sha256": "b30b032e083737e718aabd0063e7aef457092d647c6431e6f22121154625d3df",
+      "size": 1593
+    },
+    "generation_config.json": {
+      "sha256": "2d210ec4a2a4cb37612a888f3abfd7508da83610782d00ed42a41f26b09f24dd",
+      "size": 138
+    },
+    "model.safetensors": {
+      "sha256": "f239f9e016a35a3ea19b006c488b5f741cd080794288c1e5d6b1dac809869725",
+      "size": 16381516808
+    },
+    "tokenizer.json": {
+      "sha256": "476870a1f2fb6f6a2759a6ede2383bf9d5d738f17844563b65c91965b722ae09",
+      "size": 11422924
+    },
+    "tokenizer_config.json": {
+      "sha256": "4b936b5ecf3d47ab7040d0ed1728d3a5d719c2206f10a9fe4776f9d89f20e768",
+      "size": 377
+    }
+  },
+  "versions": {
+    "torch": "2.11.0+cu128",
+    "transformers": "5.5.0",
+    "peft": "0.21.0"
+  },
+  "hub_repo_id": null,
+  "hub_commit": null
+}
