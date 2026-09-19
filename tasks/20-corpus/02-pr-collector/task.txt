@@ -21,14 +21,16 @@ SCOPE
   + Same sampling rule as 01 (equal quota per year, 2% author cap), target 3000 per repository.
   + Robustness: on 403/429 with x-ratelimit-remaining 0 sleep until x-ratelimit-reset; on 5xx retry 3 times with backoff; after each page append to the output and write the page number to a checkpoint file, so a restart continues instead of starting over. The token is never printed.
   + scripts/collect_prs.py writes data/raw_v2/prs/<name>.jsonl and MANIFEST.json (same fields as 01). Copy MANIFEST.json into this task directory.
+  + Once all 12 repos finish, upload data/raw_v2/prs/ (the final sampled *.jsonl and MANIFEST.json only — not the .candidates/ working pool) to a PRIVATE Hub dataset repo `<hf-user>/tonofdevelopervoice-corpus-v2` (tasks/DECISIONS.md D8) so HOST can fetch it for `20-corpus/03-text-cleaning`. Needs a write-scoped HF_TOKEN (D9) — the read-only one already in .env cannot do this; verify the same way GITHUB_TOKEN was verified (load_dotenv() + a real API call), never by trusting an ambient shell export. If only a read-only token is available: `[!] BLOCKED: missing a write-scoped HF_TOKEN` (D9), everything else in this task stays done.
   + Tests first, seen red, with faked HTTP: unmerged PR dropped; bot dropped; 2021 PR stops paging; rate-limit response leads to a sleep (inject the sleep function) and a retry; restart from checkpoint does not duplicate records.
   − Review comments, issue text, commit lists of the PR: not collected.
   − Cleaning PR templates and checkboxes: owned by 20-corpus/03-text-cleaning.
   − GraphQL: not used; REST is enough and is already in the code base.
+  − Uploading data/raw_v2/prs/.candidates/: not done; that pool is a local resume aid, not part of the artefact HOST needs.
 
 OUTCOME
   data/raw_v2/prs/*.jsonl and tasks/20-corpus/02-pr-collector/MANIFEST.json with at least
-  20000 PR records in total.
+  20000 PR records in total, plus a Hub dataset commit HOST can download from (D8/D9).
 
 VERIFY (DATA)
   1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
@@ -37,6 +39,9 @@ VERIFY (DATA)
   3. `grep -rn "ghp_\|github_pat_" data/raw_v2 tasks/20-corpus` prints nothing.
   4. Reverse control: in a scratch copy remove the merged_at condition — the unmerged-PR
      test must fail. Keep the red output in NOTES.md.
+  5. From a clean shell on any host: `hf download <repo from NOTES.md> --repo-type dataset`
+     succeeds and its files match the local `data/raw_v2/prs/*.jsonl` (sha256). Skipped,
+     with a note why, if D9's write-token blocker was never lifted.
 
 ROLE
   DATA

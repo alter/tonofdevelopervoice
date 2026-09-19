@@ -89,15 +89,45 @@ batch inspector proves both on real collated batches before any run.
 
 **Rejected.** Relying on TRL/Unsloth defaults for EOS — version-dependent and unverified.
 
-## D8. Weights travel through the Hugging Face Hub — 2026-09-19 [agent]
+## D8. Every artefact that must cross hosts travels through the Hugging Face Hub — 2026-09-19 [agent]
 
-**Decided.** The merged bf16 model and the MLX 4-bit model are uploaded to the owner's
-Hub account (publishing weights is authorised in `docs/PROJECT.md` §5). The Mac downloads
-the MLX model from there. The v1 adapter stays in Git LFS at `training/output/`; new runs
-write to `training/runs/<run-id>/` (gitignored).
+**Decided.** Not only the merged bf16 model and the MLX 4-bit model (publishing weights is
+authorised in `docs/PROJECT.md` §5) — the collected corpus (`data/raw_v2/`) and the
+evaluation-only real-AI-text sets (`data/eval_real/`) travel the same way: a private Hub
+**dataset** repo per artefact (`tonofdevelopervoice-corpus-v2`,
+`tonofdevelopervoice-eval-sets`), uploaded from whichever host collected it, downloaded on
+whichever host needs it next. The Mac downloads the MLX model from there. The v1 adapter
+stays in Git LFS at `training/output/`; new runs write to `training/runs/<run-id>/`
+(gitignored).
 
-**Why.** `data/` and `models/` are not synchronised between hosts and a 4.6 GB file does
-not belong in Git LFS. A manifest with sha256 in the task directory ties each artefact to
-its run.
+**Why.** `data/` and `models/` are not synchronised between hosts (`.gitignore` excludes
+`data/` from git entirely, on purpose — corpus stays local, only the one already-published
+adapter went through Git LFS, by direct owner request, and that is not a general pattern
+for this project) and files this size do not belong in Git LFS as a rule. A manifest with
+sha256 in the task directory ties each artefact to its run.
 
-**Rejected.** `scp` between hosts (no SSH path exists, `docs/plans/tonofdevelopervoice-v1.md:325`).
+**Rejected.** Git LFS as the general transport (right for one already-published ~175 MB
+adapter by direct request; wrong for a corpus that will only grow across re-runs — every
+version stays in git history forever under LFS, which `.gitignore`'s own comment already
+rules out for `data/`). `scp`/`rsync` between hosts (no SSH path exists between the agent's
+Mac and HOST sessions, `docs/plans/tonofdevelopervoice-v1.md:325` — though the owner could
+set this up by hand outside any task; not relied on here since it isn't in place).
+
+## D9. `HF_TOKEN` in `.env` is read-only; every Hub upload is blocked until it is replaced — 2026-09-19 [agent, found, not decided]
+
+**Found, not a decision to record and move past** — a live blocker for D8. Checked the same
+way `GITHUB_TOKEN` was checked (`load_dotenv()` + a real API call, never trusting an
+ambient shell export or assuming): `GET /api/whoami-v2` returns `"auth": {"accessToken":
+{"displayName": "public_read", "role": "read"}}` — a token created for downloading public
+models, not for writing. Every Hub upload D8 depends on (corpus, eval sets, trained
+weights) fails with this token: `hf upload ...` needs `role: write` (or higher) on the
+target repo.
+
+**What is needed:** the owner creates a new Hub access token with **Write** scope
+(huggingface.co → Settings → Access Tokens) and puts it in `.env` — either replacing
+`HF_TOKEN` or as a second variable (e.g. `HF_TOKEN_WRITE`) if the read-only one is still
+wanted for downloads elsewhere. Until then, any task whose OUTCOME needs a Hub upload
+(`20-corpus/02-pr-collector`'s corpus transport, `20-corpus/04-ai-eval-inputs`'s Hub step,
+`10-serving/01-merged-export`, `10-serving/02-mlx-conversion`) stops at that step with
+`[!] BLOCKED: missing a write-scoped HF_TOKEN` — this is a missing credential per
+`tasks/PROTOCOL.md` §6, not something to work around.
