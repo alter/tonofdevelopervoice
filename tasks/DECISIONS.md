@@ -134,8 +134,9 @@ wanted for downloads elsewhere. Until then, any task whose OUTCOME needs a Hub u
 
 **Resolved 2026-09-19.** Owner replaced `HF_TOKEN` in `.env`. Re-checked the same way
 (never trusting the shell): `role: "write"`. `20-corpus/04-ai-eval-inputs` uploaded to
-`alterpub/tonofdevelopervoice-eval-sets` (private) and verified by downloading into a
-clean directory and comparing sha256 — both matched. Still applies to
-`20-corpus/02-pr-collector` (corpus not fully collected yet) and to
-`10-serving/01-merged-export` / `10-serving/02-mlx-conversion` (not started) only in the
-sense that they have not yet used the new token, not because it is expected to fail.
+`alterpub/tonofdevelopervoice-eval-sets` (private) and `20-corpus/02-pr-collector`'s full
+32709-record corpus to `alterpub/tonofdevelopervoice-corpus-v2` (private) — both verified
+by downloading into a clean directory and comparing sha256 against the local files; all
+matched. Still applies to `10-serving/01-merged-export` / `10-serving/02-mlx-conversion`
+(not started) only in the sense that they have not yet used the new token, not because it
+is expected to fail.

@@ -8,11 +8,11 @@ valid, 5000/5000 core, 30/30 search, authenticated as `alter`.
 ## What was built
 
 - `collect/sources.py`: `PR_REPOS`, the 12 repos from `task.txt` SCOPE.
-- `collect/http_retry.py` (new, shared): `fetch_with_retries()` — rate-limit sleep+retry,
-  5xx retry+backoff, connection-level-error retry+backoff, and a `ThreadPoolExecutor`
-  wall-clock cutoff independent of socket-level timeouts. Extracted out of
-  `github_prs.py` once it became clear the same logic would be needed again for
-  `collect/github_search.py`.
+- `collect/http_retry.py` (new, shared with `20-corpus/04-ai-eval-inputs`):
+  `fetch_with_retries()` — primary rate-limit sleep+retry, GitHub's *secondary* rate limit
+  (found while building `04-ai-eval-inputs`, added here too since both modules share the
+  function), 5xx retry+backoff, connection-level-error retry+backoff, and a
+  `ThreadPoolExecutor` wall-clock cutoff independent of socket-level timeouts.
 - `collect/sampling.py` (shared): `sample_by_year_and_author()` — equal quota per
   calendar year with redistribution of a thin year's unused quota, deterministic
   hash-of-id ordering within a year, a 2%-of-target author cap. `task.txt` says "same
@@ -25,107 +25,94 @@ valid, 5000/5000 core, 30/30 search, authenticated as `alter`.
   non-AI-co-authored, non-empty body; reuses `collect.filters.{CUTOFF,has_ai_co_author}`).
 - `scripts/collect_prs.py`: per-repo candidate collection to
   `data/raw_v2/prs/.candidates/<name>.jsonl` + `<name>.checkpoint.json` (append-only,
-  resumable), then `sample_by_year_and_author()` down to `--target` (default 3000) into
-  `data/raw_v2/prs/<name>.jsonl`; `MANIFEST.json` is rewritten after every repo, not only
-  at the end, so a long multi-repo run leaves a valid partial manifest if interrupted.
-- Tests: `tests/test_http_retry.py` (pure retry mechanics — mocks the `fetch` callable
-  directly), `tests/test_sampling.py`, `tests/test_pr_collector.py` (PR-domain behaviour —
-  mocks `urlopen`), `tests/test_collect_prs.py`.
+  resumable), then `sample_by_year_and_author()` down to `--target` (3000) into
+  `data/raw_v2/prs/<name>.jsonl`; `MANIFEST.json` rewritten after every repo.
+- Tests: `tests/test_http_retry.py`, `tests/test_sampling.py`, `tests/test_pr_collector.py`,
+  `tests/test_collect_prs.py`.
 
-## Three real bugs found by actually running this against GitHub, not by review
+## Four real bugs found by actually running this against GitHub, not by review
 
-**1. `http.client.IncompleteRead` was not caught at all.** First real smoke run
-(`--repos python/cpython --target 50`) died on `IncompleteRead(1418794 bytes read, 25700
-more expected)` — a connection-level truncation, not an HTTP status, so it skipped past
-`except urllib.error.HTTPError` entirely (confirmed:
-`issubclass(http.client.IncompleteRead, urllib.error.URLError)` is `False`, same for
-`OSError`). Fixed in `http_retry.fetch_with_retries`: also catches
-`(urllib.error.URLError, http.client.HTTPException, TimeoutError)` with the same backoff.
-Tests seen red before the fix.
+**1. `http.client.IncompleteRead` was not caught at all** (first smoke run). **2. A
+socket-level `timeout=` does not bound total request time** against a slowly dribbling
+response (first full run) — both fixed with `http_retry.fetch_with_retries`'s
+`ThreadPoolExecutor` wall-clock cutoff, the same pattern already used in
+`scripts/synthesize.py` and documented in `docs/plans/tonofdevelopervoice-v1.md` for the
+identical symptom class. **3. `load_candidates` used `str.splitlines()` on JSONL
+content** — breaks on a `U+2028` (LINE SEPARATOR) that `json.dumps(...,
+ensure_ascii=False)` does not escape; one real `kubernetes/kubernetes` PR body contained
+one, corrupting exactly one line into two invalid fragments once written and reloaded.
+Fixed: split strictly on `"\n"`. All three documented in detail (root cause with
+evidence, red-first tests, and the reverse control) in earlier revisions of this file —
+see git history (`27b7eec`, `06a8788`, `fa0a6fc`) — kept short here since the fixes are
+already in `src/` and covered by tests.
 
-**2. A socket-level `timeout=` does not bound total request time.** After fix 1, a real
-full run stalled again: `lsof` showed one TCP connection `ESTABLISHED` to GitHub for 3+
-minutes with the candidates file completely stopped advancing, despite
-`urlopen(request, timeout=45)` being in place — the same symptom class already documented
-in `docs/plans/tonofdevelopervoice-v1.md` (llama-server and Unsloth's `hf_xet` downloader
-both hung on an ESTAB socket with a per-call timeout that never fired, because the data was
-trickling in slowly enough to keep resetting the per-`recv()` timer without the *overall*
-request ever finishing). Applied that plan log's own fix: "a hard wall-clock cutoff via
-`ThreadPoolExecutor.result(timeout=...)`, independent of whatever urllib/socket-level
-timeout misbehaved" — `http_retry.fetch_with_retries` submits the actual fetch to a
-`ThreadPoolExecutor` and bounds it with `.result(timeout=request_timeout)` (default 60s)
-regardless of what the socket is doing; `executor.shutdown(wait=False)` on generator close
-so an abandoned slow thread never blocks the pipeline. Confirmed by running the real
-collector against GitHub (not simulated) before and after.
-
-**3. `load_candidates` used `str.splitlines()` on JSONL content — corrupts on a
-Unicode line separator.** Discovered only after fixes 1-2 let a real run finish
-`kubernetes/kubernetes` end to end (43575 candidates, 606 pages) and then crash in
-`load_candidates` with `json.decoder.JSONDecodeError: Unterminated string`. Root-caused
-with evidence, not guessed: `text.split("\n")` gave 43576 pieces, `text.splitlines()` gave
-43577 — a diff of exactly one, and scanning the text for
-`unicodedata.category(ch) in ("Zl", "Zp")` or NEL/FS/GS/RS control chars found exactly one
-`U+2028` (LINE SEPARATOR), almost certainly pasted into a real PR body. `str.splitlines()`
-breaks on `U+2028`/`U+2029`/NEL/etc. in addition to `\n`/`\r`; `json.dumps(...,
-ensure_ascii=False)` does not escape those characters (the JSON spec only requires
-escaping the ASCII control range plus `"`/`\`), so one PR's JSON line got cut into two
-invalid fragments. Fixed: `load_candidates` now splits strictly on `"\n"`. Verified against
-the real corrupted file after the fix: `load_candidates(".../kubernetes.jsonl")` →
-43575/43575 records, all unique ids, zero errors. Test
-(`test_load_candidates_survives_a_unicode_line_separator_inside_a_field`) seen red first,
-reproducing the exact `JSONDecodeError` from the real file with a synthetic `U+2028`.
-`grep -rn "\.splitlines()" src/ scripts/` shows one more occurrence
-(`src/tonofdevelopervoice/env.py`, for `.env` `KEY=VALUE` lines) — lower risk (not JSONL,
-values rarely contain exotic Unicode) and out of this task's scope; not touched.
+**4. The retry budget (3 attempts) was exhausted by a real, unlucky run of consecutive
+`IncompleteRead`s** on `etcd-io/etcd`, mid-run, after 8 repos had already completed
+cleanly:
+```
+RuntimeError: GitHub API request failed: IncompleteRead(1482434 bytes read, 37433 more expected)
+```
+This is not a bug — `fetch_with_retries` caught and retried it exactly as designed (3
+attempts, exponential backoff) and correctly gave up and raised on the 4th. The checkpoint
+(`data/raw_v2/prs/.candidates/etcd.checkpoint.json`, page 19, 1017 candidates) was intact;
+restarting the same command resumed etcd from there and finished the remaining 4 repos
+(etcd, cpython, pandas, salt) without further incident. No code change was needed — the
+checkpoint/resume design this task built for exactly this scenario did its job. Left
+`max_transient_attempts` at 3 (its default): raising it on the strength of one unlucky
+streak would be tuning a check to a single data point, not evidence of it being
+systematically too low.
 
 ## Gate
 
 `ruff check .` / `mypy .` / `pytest` / `coverage_gate.py --run` (which measures `--cov=src`
 only — `scripts/` is not gated, matching the existing precedent for
-`scripts/batch_rewrite.py`'s untested `main()`): all exit 0. 173 tests, coverage 100.00%
+`scripts/batch_rewrite.py`'s untested `main()`): all exit 0. 208 tests, coverage 100.00%
 meets the floor 100.00%.
 
 ## VERIFY
 
 1. Gate green (above).
-2. `grep -rn "ghp_\|github_pat_" data/raw_v2 tasks/20-corpus` — the only hit is
-   `tasks/20-corpus/02-pr-collector/task.txt:37`, which is this very check's own
-   documentation quoting the pattern, not a leaked token. No real token anywhere in
-   `data/raw_v2` or `tasks/20-corpus`.
-3. Reverse control: in a scratch copy (`.claude/scratch/rev-control-02/`, removed after
+2. Recomputed from all 13 `data/raw_v2/prs/*.jsonl` files:
+   - total records: **32709** (≥ 20000 required)
+   - max `author_date`: **2020-12-31T17:28:16Z** (< 2021-01-01)
+   - records with a `"[bot]"` login fragment surfacing in the stored text: **0**
+   - per-repo counts and year histograms: `tasks/20-corpus/02-pr-collector/MANIFEST.json`
+     (copied from `data/raw_v2/prs/MANIFEST.json`); every repo's `largest_author_share`
+     is at or under the 2% cap.
+3. `grep -rn "ghp_\|github_pat_" data/raw_v2 tasks/20-corpus` — the only hits are this
+   check's own documentation (`task.txt:37,39`), never a real token.
+4. Reverse control: in a scratch copy (`.claude/scratch/rev-control-02/`, removed after
    capture) with the `merged_at` check deleted from `is_valid_pull_request`:
    ```
    test_is_valid_pull_request_rejects_unmerged: FAILED (expected) -> got True, wanted False
    ```
-4. **NOT DONE (data collection still running).** Total-records and max-author_date checks
-   from `task.txt` VERIFY item 2 need the finished `data/raw_v2/prs/*.jsonl` +
-   `MANIFEST.json` for all 12 repos, which is a genuinely long-running job (see below).
+5. From a clean scratch directory (`.claude/scratch/hub-verify-corpus/`, removed after
+   capture): `hf download alterpub/tonofdevelopervoice-corpus-v2 --repo-type dataset
+   --local-dir ...` then sha256 of all 13 downloaded files (12 repo `.jsonl` +
+   `MANIFEST.json`) against the local copies in `data/raw_v2/prs/` — **all 13 matched
+   exactly**, zero mismatches.
 
-## Real collection run — in progress, backgrounded
+## Hub upload
 
-Launched detached (`nohup ... &`, `disown`) on MAC, relaunched twice more after fixes 2 and
-3 (each earlier attempt's partial `.candidates/` progress was kept and resumed cleanly —
-that's exactly what the checkpoint mechanism and the fix-3 dedup are for):
-`uv run python scripts/collect_prs.py --out-dir data/raw_v2/prs --target 3000`, log at
-`.claude/scratch/collect_prs_full_run.log`. `PR_REPOS` order starts with
-`kubernetes/kubernetes` (fully collected: 43575 candidates, 606 pages — the biggest repo in
-the list by far) then `rust-lang/rust`. `python/cpython` was smoke-tested earlier in
-isolation and has a stale partial checkpoint (3464 candidates, page 50) that the full run
-will resume correctly when it reaches cpython (10th in `PR_REPOS`).
+Owner replaced `HF_TOKEN` with a write-scoped one (`tasks/DECISIONS.md` D9, resolved).
+Re-verified via `load_dotenv()` + `GET /api/whoami-v2` (never trusting the shell):
+`role: "write"`.
 
-**To check progress:** `cat data/raw_v2/prs/MANIFEST.json` for repos already finished
-(written incrementally after each repo), or `wc -l data/raw_v2/prs/.candidates/*.jsonl` for
-the repo currently in flight. `ps aux | grep collect_prs` to confirm it's still alive.
+- `hf repo create alterpub/tonofdevelopervoice-corpus-v2 --type dataset --private --exist-ok`
+  → `https://huggingface.co/datasets/alterpub/tonofdevelopervoice-corpus-v2`.
+- Staged only the final sampled `data/raw_v2/prs/*.jsonl` + `MANIFEST.json` under a
+  `prs/` subdirectory (never `.candidates/` — that pool is a local resume aid, not part
+  of the artefact HOST needs, per `task.txt`'s `−` line) and uploaded: commit
+  `d942dba0e10de26c27f8084daaedb0f8d7d2357a`.
+- Verified from a clean download (VERIFY item 5 above).
 
-**To finish this task once the run completes:** re-run `task.txt` VERIFY item 2 (total
-records ≥ 20000, max `author_date` < 2021-01-01, zero `[bot]`-login records — a one-line
-Python command over `data/raw_v2/prs/*.jsonl`), append the numbers here under `## After`,
-copy the final `MANIFEST.json` into this task directory, set `labels.txt` `status:done`.
+To fetch on HOST for `20-corpus/03-text-cleaning`:
+`hf download alterpub/tonofdevelopervoice-corpus-v2 --repo-type dataset --local-dir data/raw_v2`
+(the repo's `prs/` subdirectory lands at `data/raw_v2/prs/` directly).
 
 ## Status
 
-`labels.txt` set to `status:in_progress`: code complete, tested, gate green, three real
-bugs found and fixed with evidence from actually running it, reverse control done — but
-`OUTCOME` (`data/raw_v2/prs/*.jsonl` + `MANIFEST.json`, ≥20000 records total) does not
-exist yet because the collection run needs real wall-clock time against the live GitHub
-API. Not `blocked`: nothing is missing, it is simply still running.
+`labels.txt` set to `status:done`: `OUTCOME` fully exists — 32709 records across 12
+`data/raw_v2/prs/*.jsonl` files (≥ 20000 required), `MANIFEST.json` copied into this task
+directory, and the Hub dataset commit above, verified from a clean state.
+`verify:passed` is left for `/verify` (another context), per `tasks/PROTOCOL.md` §5.
