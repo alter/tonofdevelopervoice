@@ -1,11 +1,7 @@
 # test_pr_collector.py
 import json
-import urllib.error
-from email.message import Message
 from typing import Any
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from tonofdevelopervoice.collect.github_prs import (
     fetch_pull_requests,
@@ -38,21 +34,6 @@ RAW_PR_AI_CO_AUTHOR = {
 }
 RAW_PR_EMPTY_BODY = {**RAW_PR_VALID, "number": 104, "body": "   "}
 RAW_PR_TOO_RECENT = {**RAW_PR_VALID, "number": 105, "created_at": "2021-03-01T10:00:00Z"}
-
-
-def _rate_limited_error() -> urllib.error.HTTPError:
-    headers = Message()
-    headers["x-ratelimit-remaining"] = "0"
-    headers["x-ratelimit-reset"] = "1600000000"
-    return urllib.error.HTTPError(
-        url="https://api.github.com", code=403, msg="rate limited", hdrs=headers, fp=None
-    )
-
-
-def _server_error(code: int = 502) -> urllib.error.HTTPError:
-    return urllib.error.HTTPError(
-        url="https://api.github.com", code=code, msg="Server Error", hdrs=Message(), fp=None
-    )
 
 
 def test_is_valid_pull_request_rejects_unmerged() -> None:
@@ -145,68 +126,35 @@ def test_fetch_pull_requests_stops_on_empty_page() -> None:
     assert pages == []
 
 
-def test_fetch_pull_requests_sleeps_and_retries_after_rate_limit() -> None:
+def test_fetch_pull_requests_respects_start_page_and_max_pages() -> None:
+    page5 = [RAW_PR_VALID] * 2
+    with patch(URLOPEN_TARGET, side_effect=_fake_urlopen([page5])):
+        pages = list(
+            fetch_pull_requests(
+                "owner/repo",
+                "fake-token",
+                "2021-01-01T00:00:00Z",
+                per_page=2,
+                start_page=5,
+                max_pages=1,
+            )
+        )
+    assert [p for p, _ in pages] == [5]
+
+
+def test_fetch_pull_requests_delegates_retries_to_http_retry() -> None:
     call_count = 0
 
     def flaky_urlopen(_request: Any, **_kwargs: Any) -> MagicMock:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            raise _rate_limited_error()
-        cm = MagicMock()
-        cm.__enter__.return_value.read.return_value = json.dumps([RAW_PR_VALID]).encode("utf-8")
-        return cm
+            import urllib.error
+            from email.message import Message
 
-    sleep_calls: list[float] = []
-    with patch(URLOPEN_TARGET, side_effect=flaky_urlopen):
-        pages = list(
-            fetch_pull_requests(
-                "owner/repo",
-                "fake-token",
-                "2021-01-01T00:00:00Z",
-                sleep=sleep_calls.append,
-            )
-        )
-    assert len(sleep_calls) == 1
-    assert sleep_calls[0] >= 0
-    assert len(pages) == 1
-
-
-def test_fetch_pull_requests_retries_on_server_error_then_succeeds() -> None:
-    call_count = 0
-
-    def flaky_urlopen(_request: Any, **_kwargs: Any) -> MagicMock:
-        nonlocal call_count
-        call_count += 1
-        if call_count <= 2:
-            raise _server_error()
-        cm = MagicMock()
-        cm.__enter__.return_value.read.return_value = json.dumps([RAW_PR_VALID]).encode("utf-8")
-        return cm
-
-    sleep_calls: list[float] = []
-    with patch(URLOPEN_TARGET, side_effect=flaky_urlopen):
-        pages = list(
-            fetch_pull_requests(
-                "owner/repo",
-                "fake-token",
-                "2021-01-01T00:00:00Z",
-                sleep=sleep_calls.append,
-            )
-        )
-    assert len(sleep_calls) == 2
-    assert len(pages) == 1
-
-
-def test_fetch_pull_requests_sleeps_a_default_minute_when_reset_header_is_missing() -> None:
-    call_count = 0
-
-    def flaky_urlopen(_request: Any, **_kwargs: Any) -> MagicMock:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
             headers = Message()
             headers["x-ratelimit-remaining"] = "0"
+            headers["x-ratelimit-reset"] = "1600000000"
             raise urllib.error.HTTPError(
                 url="https://api.github.com", code=403, msg="rate limited", hdrs=headers, fp=None
             )
@@ -216,7 +164,7 @@ def test_fetch_pull_requests_sleeps_a_default_minute_when_reset_header_is_missin
 
     sleep_calls: list[float] = []
     with patch(URLOPEN_TARGET, side_effect=flaky_urlopen):
-        list(
+        pages = list(
             fetch_pull_requests(
                 "owner/repo",
                 "fake-token",
@@ -224,7 +172,8 @@ def test_fetch_pull_requests_sleeps_a_default_minute_when_reset_header_is_missin
                 sleep=sleep_calls.append,
             )
         )
-    assert sleep_calls == [60.0]
+    assert len(sleep_calls) == 1
+    assert len(pages) == 1
 
 
 def test_fetch_pull_requests_passes_a_request_timeout_so_a_stall_cannot_hang_forever() -> None:
@@ -233,155 +182,3 @@ def test_fetch_pull_requests_passes_a_request_timeout_so_a_stall_cannot_hang_for
     _request, kwargs = mock_urlopen.call_args
     assert kwargs.get("timeout") is not None
     assert kwargs["timeout"] > 0
-
-
-def test_fetch_pull_requests_gives_up_waiting_on_a_dribbling_response_and_retries() -> None:
-    import threading
-
-    call_count = 0
-    release = threading.Event()
-
-    def slow_then_fast_urlopen(_request: Any, **_kwargs: Any) -> MagicMock:
-        nonlocal call_count
-        call_count += 1
-        cm = MagicMock()
-        if call_count == 1:
-            release.wait(30)
-            cm.__enter__.return_value.read.return_value = json.dumps([]).encode("utf-8")
-        else:
-            cm.__enter__.return_value.read.return_value = json.dumps([RAW_PR_VALID]).encode(
-                "utf-8"
-            )
-        return cm
-
-    sleep_calls: list[float] = []
-    try:
-        with patch(URLOPEN_TARGET, side_effect=slow_then_fast_urlopen):
-            pages = list(
-                fetch_pull_requests(
-                    "owner/repo",
-                    "fake-token",
-                    "2021-01-01T00:00:00Z",
-                    sleep=sleep_calls.append,
-                    request_timeout=0.05,
-                )
-            )
-    finally:
-        release.set()
-    assert len(sleep_calls) == 1
-    assert len(pages) == 1
-
-
-def test_fetch_pull_requests_retries_after_a_socket_timeout_then_succeeds() -> None:
-    call_count = 0
-
-    def flaky_urlopen(_request: Any, timeout: float | None = None) -> MagicMock:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise TimeoutError("timed out")
-        cm = MagicMock()
-        cm.__enter__.return_value.read.return_value = json.dumps([RAW_PR_VALID]).encode("utf-8")
-        return cm
-
-    sleep_calls: list[float] = []
-    with patch(URLOPEN_TARGET, side_effect=flaky_urlopen):
-        pages = list(
-            fetch_pull_requests(
-                "owner/repo",
-                "fake-token",
-                "2021-01-01T00:00:00Z",
-                sleep=sleep_calls.append,
-            )
-        )
-    assert len(sleep_calls) == 1
-    assert len(pages) == 1
-
-
-def test_fetch_pull_requests_retries_after_a_truncated_read_then_succeeds() -> None:
-    import http.client
-
-    call_count = 0
-
-    def flaky_urlopen(_request: Any, **_kwargs: Any) -> MagicMock:
-        nonlocal call_count
-        call_count += 1
-        cm = MagicMock()
-        if call_count == 1:
-            cm.__enter__.return_value.read.side_effect = http.client.IncompleteRead(
-                b"partial", 25700
-            )
-        else:
-            cm.__enter__.return_value.read.return_value = json.dumps(
-                [RAW_PR_VALID]
-            ).encode("utf-8")
-        return cm
-
-    sleep_calls: list[float] = []
-    with patch(URLOPEN_TARGET, side_effect=flaky_urlopen):
-        pages = list(
-            fetch_pull_requests(
-                "owner/repo",
-                "fake-token",
-                "2021-01-01T00:00:00Z",
-                sleep=sleep_calls.append,
-            )
-        )
-    assert len(sleep_calls) == 1
-    assert len(pages) == 1
-
-
-def test_fetch_pull_requests_raises_after_repeated_truncated_reads() -> None:
-    import http.client
-
-    def always_truncated(_request: Any, **_kwargs: Any) -> MagicMock:
-        cm = MagicMock()
-        cm.__enter__.return_value.read.side_effect = http.client.IncompleteRead(b"x", 1)
-        return cm
-
-    with (
-        patch(URLOPEN_TARGET, side_effect=always_truncated),
-        pytest.raises(RuntimeError, match="IncompleteRead"),
-    ):
-        list(
-            fetch_pull_requests(
-                "owner/repo", "fake-token", "2021-01-01T00:00:00Z", sleep=lambda _s: None
-            )
-        )
-
-
-def test_fetch_pull_requests_raises_after_repeated_stalls() -> None:
-    import time as time_module
-
-    def always_stalls(_request: Any, **_kwargs: Any) -> MagicMock:
-        time_module.sleep(1)
-        return MagicMock()
-
-    with (
-        patch(URLOPEN_TARGET, side_effect=always_stalls),
-        pytest.raises(RuntimeError, match="timed out"),
-    ):
-        list(
-            fetch_pull_requests(
-                "owner/repo",
-                "fake-token",
-                "2021-01-01T00:00:00Z",
-                sleep=lambda _s: None,
-                request_timeout=0.01,
-            )
-        )
-
-
-def test_fetch_pull_requests_raises_after_repeated_server_errors() -> None:
-    def always_fail(_request: Any, **_kwargs: Any) -> MagicMock:
-        raise _server_error()
-
-    with (
-        patch(URLOPEN_TARGET, side_effect=always_fail),
-        pytest.raises(RuntimeError, match="502"),
-    ):
-        list(
-            fetch_pull_requests(
-                "owner/repo", "fake-token", "2021-01-01T00:00:00Z", sleep=lambda _s: None
-            )
-        )
