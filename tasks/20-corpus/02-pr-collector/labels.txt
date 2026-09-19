@@ -2,7 +2,7 @@ phase:corpus
 role:DATA
 type:feature
 priority:P0
-status:todo
+status:in_progress
 verify:pending
 depends:05-scope/01-ledger-update
 milestone:M2
