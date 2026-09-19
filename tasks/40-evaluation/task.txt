@@ -1,0 +1,35 @@
+TASK: Phase 40 — evaluation: it notices copying, and it measures what ships
+
+GOAL
+  v1's evaluation rewarded copying, used only in-distribution inputs, had no baseline
+  and ran through a backend the Mac does not use (audit section 4). This phase builds
+  the evaluation that would have caught the owner's two files, and holds gate 3.
+
+CONTEXT
+  docs/audit-2026-09-19.md (section 4)
+  tasks/DECISIONS.md (D3, D5)
+  tasks/GOAL.md (gate 3, stop condition)
+  src/tonofdevelopervoice/evaluate/
+  scripts/evaluate.py
+  scripts/generate_eval_outputs.py
+
+SCOPE
+  + 01-degeneracy-metrics — copy, truncation, empty, trailer leak, fact retention; "before" numbers for v1
+  + 02-shipped-path-eval — generation on the Mac through MlxInferenceBackend; per-set reports
+  + 03-baselines — identity, v1, prompted instruct model
+  + 04-quality-gate — GATE 3: thresholds fixed in advance + the owner's eyes
+  − An LLM judge: still not configured (no key); the owner's reading of 20 samples replaces it
+  − Any edit to training code or data: owned by phases 20 and 30
+
+OUTCOME
+  tasks/40-evaluation/04-quality-gate/ holds the reports and the gate result.
+
+VERIFY (EVAL)
+  1. All four child tasks are status:done and verify:passed.
+  2. Reverse control: see 04-quality-gate item 3 (the gate is red on v1).
+
+ROLE
+  EVAL, HUMAN
+
+DEPENDS
+  10-serving

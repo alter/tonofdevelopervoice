@@ -1,0 +1,48 @@
+TASK: Evaluation generated on the Mac through the shipped artefact
+
+GOAL
+  Make `generate_eval_outputs.py` use the same factory and the same MLX model directory
+  as the owner's batch script (DECISIONS D5), over four input sets, resumable, and turn
+  `evaluate.py` into per-set reports. Runs on MAC.
+
+CONTEXT
+  scripts/generate_eval_outputs.py:9-48 (hard-coded UnslothInferenceBackend, not resumable)
+  scripts/evaluate.py
+  src/tonofdevelopervoice/evaluate/style_classifier.py
+  src/tonofdevelopervoice/serve/factory.py
+  src/tonofdevelopervoice/serve/generation.py
+  tasks/20-corpus/04-ai-eval-inputs/MANIFEST.json (Hub dataset repo with the sets)
+
+SCOPE
+  + generate_eval_outputs.py: backend = default_backend(); --inputs accepts a .jsonl (fields id, input or text, optional output) or a directory of .txt; appends one row per input (id, source, model_output, reference or null, finish_reason, seconds) and skips ids already present, so a stopped run continues.
+  + Sets: eval_indist (first 200 rows), eval_heldout (all), real_ai (ai_commits + ai_prs), owner (data/eval_real/owner). Fetch the first three with `hf download <hf-user>/tonofdevelopervoice-eval-sets --repo-type dataset` (HF_TOKEN from .env).
+  + pyproject.toml dependency group `eval` with the scoring packages pinned, so scoring runs on MAC with `uv sync --group eval`.
+  + Style classifier: trained on real pre-2021 targets vs synthetic inputs of TRAIN styles only; report its accuracy separately on (a) held-out styles and (b) real AI text vs held-out real targets. If (b) is under 0.8 the style score is not trustworthy on real input — say so in the report instead of hiding it.
+  + evaluate.py writes report_<set>.json per set with the 40-evaluation/01 metrics; reference metrics only where references exist.
+  + Sampling sweep on 100 real_ai inputs: (1) greedy, (2) greedy + repetition_penalty 1.1, (3) temperature 0.3 / top_p 0.9. Choose the lowest copy_rate among settings whose fact_retention_mean is within 0.02 of the best. This task may change ONLY the default values in serve/generation.py, with the sweep table in NOTES.md.
+  + Tests first, seen red: resume skips done ids; a directory input works; a set without references produces a report.
+  − Scoring on HOST: allowed for a quick look, never for a gate (D5).
+  − New metrics: owned by 40-evaluation/01-degeneracy-metrics.
+
+OUTCOME
+  report_eval_indist.json, report_eval_heldout.json, report_real_ai.json,
+  report_owner.json for model v2 in tasks/40-evaluation/02-shipped-path-eval/, and the
+  sweep table in NOTES.md. Expected generation time ~5 hours on the Mac (about 1000
+  inputs at ~20 s — an estimate until gate 1 gives the real speed).
+
+VERIFY (EVAL)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. `grep -n "UnslothInferenceBackend" scripts/generate_eval_outputs.py` prints nothing.
+  3. Stop the generation with Ctrl-C half way, start again: row count continues, no id
+     appears twice (one-line check in NOTES.md).
+  4. Reverse control: run the same pipeline with the stub backend (no model variable):
+     report_owner.json must show copy_rate 1.0 — the stub echoes its input. Keep it.
+
+ROLE
+  EVAL
+
+DEPENDS
+  40-evaluation/01-degeneracy-metrics
+  Also 10-serving/04-mlx-backend, 20-corpus/04-ai-eval-inputs, 20-corpus/06-dataset-v2,
+  30-training/04-training-run-v2 (for the v2 reports; the tooling can be built and tried
+  on the v1 model earlier).

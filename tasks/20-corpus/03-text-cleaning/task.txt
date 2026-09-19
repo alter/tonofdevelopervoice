@@ -1,0 +1,47 @@
+TASK: dataset/clean.py — targets without trailers, merges, empties or templates
+
+GOAL
+  v1 targets teach the model to emit nothing (mysql: 241/1000 empty), to emit merge
+  boilerplate, and to invent `Signed-off-by:` names and `git-svn-id:` lines (audit D3).
+  Build the cleaning step and a checker that fails on any such record.
+
+CONTEXT
+  docs/audit-2026-09-19.md (D3, D6 — the measured defects)
+  data/raw/*.jsonl (v1 — read-only; the checker must turn red on it)
+  src/tonofdevelopervoice/dataset/assemble.py:17-26 (dedup by sha only — not enough)
+  tasks/20-corpus/01-git-history-collector/MANIFEST.json
+  tasks/20-corpus/02-pr-collector/MANIFEST.json
+
+SCOPE
+  + dataset/clean.py, pure functions, each with its own unit tests written first and seen red.
+  + strip_trailers(text): from the trailing block remove lines whose key is one of Signed-off-by, Reviewed-by, Acked-by, Tested-by, Reported-by, Suggested-by, Co-developed-by, Co-authored-by, Cc, Author, Link, Message-Id, Change-Id, Discussion, Reviewed-on, git-svn-id — and any trailing-block line containing an e-mail address. Lines with Fixes:, Closes, Resolves, Bug:, Backpatch carry content and stay.
+  + clean_pr_body(text): remove HTML comments, checkbox lines ("- [ ]", "- [x]"), image tags, and headings that are left with no text under them.
+  + drop_reason(record) returns None or one of: "empty", "merge" (starts with "Merge "), "bare_revert" (a revert whose body is only "This reverts commit <sha>."), "too_short" (< 20 characters), "too_long" (> 6000 characters), "non_english" (> 20% non-ASCII letters), "pr_too_short" (PR body < 200 characters after cleaning).
+  + text_hash(text) = sha256 of the lower-cased, whitespace-collapsed text; exact duplicates by text_hash are dropped across ALL repositories (keeps the first by id order).
+  + scripts/clean_corpus.py: data/raw_v2/ → data/clean_v2/{commits,prs}/<name>.jsonl (record + text_hash + subject_only flag) and data/clean_v2/STATS.json (per repository: kept, and a count per drop reason). Copy STATS.json into this task directory as clean_stats.json.
+  + scripts/check_clean.py DIR: exits non-zero and prints counts if any record is empty, starts with "Merge ", contains an identity trailer or git-svn-id, or shares a text_hash with another record.
+  − Near-duplicate detection (MinHash and similar): not built; exact normalised match only.
+  − Limiting the share of subject-only messages: owned by 20-corpus/06-dataset-v2.
+  − Token-length limits: owned by 20-corpus/06-dataset-v2 (needs the tokenizer).
+
+OUTCOME
+  data/clean_v2/ on HOST; tasks/20-corpus/03-text-cleaning/clean_stats.json in git;
+  `python3 scripts/check_clean.py data/clean_v2` exits 0.
+
+VERIFY (DATA)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. `python3 scripts/check_clean.py data/clean_v2` exits 0.
+  3. Reverse control on real data: `python3 scripts/check_clean.py data/raw` (the v1
+     corpus, adapter for its sha-only schema allowed) exits non-zero and reports empty
+     records, merges and trailers. Keep the output in NOTES.md.
+  4. Reverse control on code: in a scratch copy empty the trailer key list — the
+     git-svn-id test must fail.
+  5. clean_stats.json: for every repository kept + sum(drop reasons) = the count in the
+     collector MANIFEST.json.
+
+ROLE
+  DATA
+
+DEPENDS
+  20-corpus/01-git-history-collector
+  Also 20-corpus/02-pr-collector (the PR half of the run needs its output).

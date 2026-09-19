@@ -1,0 +1,38 @@
+TASK: runbook-deploy.md and runbook-training.md match the rebuilt pipeline
+
+GOAL
+  A person with a clean checkout on the Mac gets from nothing to a rewritten directory
+  by following docs/runbook-deploy.md; a person on HOST gets from nothing to a published
+  MLX model by following docs/runbook-training.md.
+
+CONTEXT
+  docs/runbook-deploy.md
+  docs/runbook-training.md
+  scripts/batch_rewrite.py
+  scripts/convert_mlx.py
+  training/export.py
+  tasks/DECISIONS.md (D1, D5, D8)
+
+SCOPE
+  + runbook-deploy.md (MAC): `uv sync --group mlx`; .env with HF_TOKEN; `hf download <mlx repo> --local-dir models/...`; `scripts/convert_mlx.py --verify`; TONOFDEVELOPERVOICE_MODEL_DIR; CLI, web form, batch usage; the three exit codes; what "length" and "input_too_long" mean and what to do; the measured speed and memory from gate 1. Remove every mention of the PEFT backend and of pointing the variable at training/output on a Mac.
+  + runbook-training.md (HOST): order of the pipeline — collect_git, collect_prs, clean_corpus + check_clean, synthesize, build_dataset_v2 + check_dataset, check_env, inspect_batch, train, export, then conversion on MAC; the llama-server / GPU memory conflict and who resolves it; HF_HUB_DISABLE_XET=1.
+  + Every command in both files is copied from a terminal where it ran, not written from memory.
+  − New behaviour: none; documentation only.
+
+OUTCOME
+  Both runbooks rewritten; a walk-through log in this task directory (walkthrough.txt).
+
+VERIFY (ARCH)
+  1. A fresh context follows runbook-deploy.md on MAC from `git clone` to one rewritten
+     file without reading anything else; every deviation is a defect of the runbook.
+  2. `grep -n "peft\|PeftInferenceBackend" docs/runbook-deploy.md` prints nothing.
+  3. Reverse control: following the runbook with a deliberately wrong model directory
+     ends in a non-zero exit code and a message that names the runbook, not in a silent
+     stub run or a 16 GB download.
+  4. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+
+ROLE
+  SERVE, TRAIN
+
+DEPENDS
+  40-evaluation/04-quality-gate

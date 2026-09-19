@@ -1,0 +1,8 @@
+phase:training
+role:TRAIN
+type:fix
+priority:P0
+status:todo
+verify:pending
+depends:30-training/01-pinned-environment
+milestone:M2

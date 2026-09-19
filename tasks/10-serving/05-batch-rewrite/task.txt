@@ -1,0 +1,40 @@
+TASK: batch_rewrite.py — resumable, timed, and it fails loudly
+
+GOAL
+  The owner's entry point. After a night it must be obvious what happened to every file:
+  done, cut off, refused, how fast. A second run must not redo finished files (audit S7).
+
+CONTEXT
+  scripts/batch_rewrite.py:34-60
+  tests/test_batch_rewrite.py
+  src/tonofdevelopervoice/serve/backend.py (RewriteResult)
+  src/tonofdevelopervoice/env.py (load_dotenv)
+
+SCOPE
+  + For every file print one line: name, finish_reason, prompt/completion tokens, seconds, tokens/second.
+  + Write <out-dir>/batch_report.json: a list of {file, output, finish_reason, prompt_tokens, completion_tokens, seconds, tokens_per_second, peak_memory_gb}, rewritten after every file (a crash loses nothing).
+  + Resume: a file is skipped only when the report already has it with finish_reason "stop" AND its output file exists. `--force` redoes everything.
+  + Output files are written to a temporary name and renamed (no half-written outputs).
+  + An "input_too_long" file gets no output file, only a report entry.
+  + Exit codes: 0 = every file "stop"; 2 = at least one file not "stop"; 1 = usage error (unchanged).
+  + main() calls load_dotenv() so HF_TOKEN from .env is seen.
+  + Tests first, seen red, with a fake backend: report contents, resume skips only "stop" entries, exit code 2, no output file for input_too_long. Assert JSON values and exit codes, not the printed wording.
+  − Parallel generation: not built; one model, one GPU.
+  − The backend itself: owned by 10-serving/04-mlx-backend.
+
+OUTCOME
+  scripts/batch_rewrite.py with the behaviour above; tests/test_batch_rewrite.py covers it.
+
+VERIFY (SERVE)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. With the stub backend (no model variable set): run twice on a temporary directory
+     with two .txt files; the second run regenerates nothing (report timestamps or a
+     fake-backend call counter in the test prove it).
+  3. Reverse control: in a scratch copy remove the finish_reason condition from the exit
+     code — the exit-code-2 test must fail. Keep the red output in NOTES.md.
+
+ROLE
+  SERVE
+
+DEPENDS
+  10-serving/04-mlx-backend

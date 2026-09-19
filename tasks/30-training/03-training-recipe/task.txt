@@ -1,0 +1,46 @@
+TASK: training/config.yaml v2 + RUN.json — a run that can be repeated and compared
+
+GOAL
+  v1: 105 steps, no seed, no warm-up, last checkpoint taken blindly, output directory
+  overwritten, nothing ties the adapter to its dataset (audit T4, D4). Define the v2
+  recipe in the validated config and make every run describe itself.
+
+CONTEXT
+  training/config.yaml
+  src/tonofdevelopervoice/train/config.py:20-89
+  tests/test_train_config.py
+  training/train.py:60-83
+  tasks/10-serving/06-mac-speed-gate/NOTES.md (decides 8B or 4B, DECISIONS D6)
+  tasks/20-corpus/06-dataset-v2/DATASET.json (token-length percentiles)
+
+SCOPE
+  + New validated config fields (tests first, seen red): seed, warmup_ratio, lr_scheduler_type, weight_decay, eval_steps, save_steps, save_total_limit, runs_dir.
+  + Values: base_model per D6; train_path data/dataset_v2/train.jsonl; eval_path data/dataset_v2/eval_indist.jsonl; max_seq_length 4096; seed 3407; num_train_epochs 2; learning_rate 0.0002; lr_scheduler_type cosine; warmup_ratio 0.03; weight_decay 0.01; per_device_train_batch_size 2; gradient_accumulation_steps 8; lora_r 16, lora_alpha 32, lora_dropout 0.05 (unchanged — no evidence against them); eval_steps 200; save_steps 200; save_total_limit 3; runs_dir training/runs.
+  + train.py: eval_strategy and save_strategy "steps"; load_best_model_at_end=True with metric_for_best_model "eval_loss"; seed passed to SFTConfig and to get_peft_model(random_state=...); output goes to training/runs/<UTC timestamp>-<git short sha>/, never to training/output/.
+  + RUN.json written at the end of train(): the full config, sha256 of DATASET.json, git commit, package versions, total steps, best checkpoint step, the eval_loss series, wall time, peak GPU memory.
+  + .gitignore: training/runs/.
+  + Dry run on HOST: 20 optimizer steps on the first 400 rows (a --max-steps argument), proving loss goes down and RUN.json appears. Save that RUN.json into this task directory as DRYRUN.json.
+  − The full run: owned by 30-training/04-training-run-v2.
+  − Hyper-parameter search: not now. One run, judged by gate 3; a sweep is a new task if the gate fails on a training symptom.
+  − Sequence packing: off; it interacts with completion masks and is not needed at this size.
+
+OUTCOME
+  training/config.yaml with the values above, validated by train/config.py;
+  tasks/30-training/03-training-recipe/DRYRUN.json showing a falling loss.
+
+VERIFY (TRAIN)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. `python3 -c "from pathlib import Path; from tonofdevelopervoice.train.config import load_training_config as l; print(l(Path('training/config.yaml')))"` prints the new fields.
+  3. DRYRUN.json: first logged loss > last logged loss; seed and DATASET.json sha256 present.
+  4. Two dry runs with the same seed give the same first logged loss to 3 decimals
+     (reproducibility), recorded in NOTES.md.
+  5. Reverse control: a config with seed removed must be rejected by
+     load_training_config (test); in a scratch copy drop the validation — the test fails.
+
+ROLE
+  TRAIN
+
+DEPENDS
+  30-training/02-completion-only-loss
+  Also 10-serving/06-mac-speed-gate (base model size) and 20-corpus/06-dataset-v2 (paths;
+  the dry run may use v1 data if v2 is not ready, say so in NOTES.md).

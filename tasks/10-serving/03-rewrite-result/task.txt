@@ -1,0 +1,50 @@
+TASK: RewriteResult — the backend contract reports how generation ended
+
+GOAL
+  Today `rewrite()` returns a bare string, so a cut-off output looks like a success
+  (audit S2, S3, S7). Change the contract once, for every backend and every caller, so
+  that truncation and over-long input are visible and the token budget follows the input
+  instead of a fixed 256.
+
+CONTEXT
+  src/tonofdevelopervoice/serve/backend.py (Protocol + Stub)
+  src/tonofdevelopervoice/serve/unsloth_backend.py:8-22
+  src/tonofdevelopervoice/serve/peft_backend.py:26-54
+  src/tonofdevelopervoice/cli.py:32-47
+  src/tonofdevelopervoice/web/app.py:37-50
+  scripts/batch_rewrite.py:50-58
+  scripts/generate_eval_outputs.py:32-48
+
+SCOPE
+  + serve/backend.py: frozen dataclass RewriteResult(text: str, finish_reason: str, prompt_tokens: int, completion_tokens: int, seconds: float, tokens_per_second: float | None, peak_memory_gb: float | None). finish_reason is exactly one of "stop", "length", "input_too_long".
+  + InferenceBackend.rewrite(text) -> RewriteResult. StubInferenceBackend returns finish_reason "stop" with whitespace token counts.
+  + New file serve/generation.py: frozen dataclass GenerationSettings(max_prompt_tokens=2048, max_completion_tokens=2048, completion_margin=64, temperature=0.0, top_p=1.0, repetition_penalty=None) and a pure function completion_budget(input_tokens, settings) = min(max_completion_tokens, input_tokens + completion_margin). A rewrite is never meant to be longer than its input; the margin covers tokenisation noise.
+  + Backends: if the formatted prompt has more than max_prompt_tokens tokens, return finish_reason "input_too_long", empty text, and generate nothing.
+  + Unsloth and PEFT backends: use completion_budget instead of the constructor's 256; finish_reason = "length" when the number of new tokens equals the budget, else "stop"; decode only the NEW token ids (output_ids[0][prompt_len:]) instead of slicing the decoded string (audit S6).
+  + cli.py: print result.text to stdout; when finish_reason != "stop" write one line to stderr and return exit code 2.
+  + web/app.py: pass finish_reason to the template and show it when it is not "stop".
+  + batch_rewrite.py and generate_eval_outputs.py: adapt to `.text` only (their real rework is in later tasks).
+  + Tests first, seen red: completion_budget (pure); CLI exit code 2 on "length" and on "input_too_long" using a fake backend; every backend returns RewriteResult. Assert values and exit codes, never message wording or HTML.
+  − MLX backend: owned by 10-serving/04-mlx-backend.
+  − Removing the PEFT backend: owned by 10-serving/04-mlx-backend.
+  − Splitting long inputs into chunks: not built; over-long input is refused, visibly.
+  − Tuning temperature / repetition penalty: owned by 40-evaluation/02-shipped-path-eval.
+
+OUTCOME
+  The contract above is in src/, every caller compiles against it, and
+  `grep -rn "max_new_tokens: int = 256" src/` prints nothing.
+
+VERIFY (SERVE)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0;
+     the coverage floor in .coverage-gate.json did not go down.
+  2. `grep -rn "max_new_tokens: int = 256" src/` prints nothing.
+  3. `echo hello | python3 -m tonofdevelopervoice.cli; echo $?` prints the stub output and 0.
+  4. Reverse control: in a scratch copy make completion_budget return a constant 256 —
+     the budget test must fail. In a scratch copy make cli.run return 0 unconditionally —
+     the exit-code test must fail. Keep both red outputs in NOTES.md.
+
+ROLE
+  SERVE
+
+DEPENDS
+  05-scope/01-ledger-update

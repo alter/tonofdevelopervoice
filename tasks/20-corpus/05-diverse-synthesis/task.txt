@@ -1,0 +1,52 @@
+TASK: synthesize.py v2 — eight AI styles, two held out, every output validated
+
+GOAL
+  One synthesis prompt taught the model to undo one transformation (audit D5). Produce
+  the "AI-written" side in eight different styles, keep two of them out of training
+  entirely, assign the train/eval split BEFORE synthesis, and reject synthetic inputs
+  that lost facts or are malformed. Runs on HOST against the owner's llama-server
+  (127.0.0.1:8080), which is used as is and never restarted.
+
+CONTEXT
+  scripts/synthesize.py:21-54 (current single prompt and request)
+  scripts/synthesize.py:57-64 (hard wall-clock timeout — keep it, see docs/plans/tonofdevelopervoice-v1.md:289-298)
+  src/tonofdevelopervoice/dataset/assemble.py:29-45 (split by sha — to be replaced by text_hash)
+  src/tonofdevelopervoice/evaluate/degeneracy.py (identifiers() — from 40-evaluation/01-degeneracy-metrics)
+  data/eval_real/owner/1.txt (what a real input looks like: long, technical, no bullet list)
+  tasks/20-corpus/03-text-cleaning/clean_stats.json
+
+SCOPE
+  + dataset/styles.py: eight named system prompts, each in a commit and a PR variant. TRAIN_STYLES: claude_sections ("## Summary / ## Changes / ## Test plan"), chatgpt_bullets (the v1 prompt), verbose_prose (first person, hedging, long paragraphs), marketing ("robust", "comprehensive", "seamless"), emoji_changelog (conventional-commit prefix + emoji), light_touch (only slightly wordier than the original — teaches small edits instead of copying). HELDOUT_STYLES: formal_report, copilot_summary ("This pull request includes ... The most important changes include:"). Every prompt demands: keep every identifier, number, path and issue reference.
+  + dataset/split.py: split_of(record) → "train" | "eval_indist" | "eval_heldout". Rules: all records of curl (commits) and django (PRs) → eval_heldout (whole-repository hold-out); otherwise bucket by text_hash: 3% eval_indist, 2% eval_heldout, rest train. Style: train and eval_indist take a TRAIN style by hash(id); eval_heldout takes a HELDOUT style.
+  + dataset/validate_synth.py, pure: reject when empty; wrapped in a code fence; starts with a chat preamble ("here is", "sure", "certainly"); len(synthetic)/len(target) < 1.2 (light_touch: < 1.05); fewer than 80% of identifiers(target) appear in the synthetic text; difflib ratio with the target > 0.9. One retry at a different temperature; the final reason is cached so it is not retried forever.
+  + Request size follows the text: max_tokens = min(3000, 2 x target tokens + 200); timeout scaled the same way. Cache key = (id, style), append-only, as today.
+  + Sample to synthesise: 15000 train candidates (at least 35% source "pr", spread evenly over repositories), 600 eval_indist, 400 eval_heldout.
+  + synth_stats.json in this task directory: per style and per source — requested, accepted, rejected per reason.
+  + Tests first, seen red: each validator rule; split is stable and text_hash-based (two ids with the same text land in the same split); held-out repositories never reach train; held-out styles never reach train.
+  − Changing the llama-server model or restarting it: forbidden without the owner.
+  − Building train.jsonl: owned by 20-corpus/06-dataset-v2.
+  − Identity pairs (input = output): never generated; they teach copying.
+
+OUTCOME
+  data/dataset_v2/.synthesis_cache.jsonl on HOST with >= 13000 accepted train-split
+  entries, and tasks/20-corpus/05-diverse-synthesis/synth_stats.json in git.
+  Estimated run time ~17 hours at ~4 s per record (v1 measured 2.7 s on shorter texts,
+  docs/plans/tonofdevelopervoice-v1.md:299); the run is resumable.
+
+VERIFY (DATA)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. synth_stats.json: every one of the 8 styles has accepted > 0; no HELDOUT style has
+     a train-split entry; rejected/requested is reported per reason.
+  3. A one-line Python command in NOTES.md draws 5 random accepted pairs per style into
+     samples.md in this task directory.
+  4. HUMAN: the owner skims samples.md — do the synthetic inputs look like what AI tools
+     really write?
+  5. Reverse control: in a scratch copy make the identifier-retention rule always pass —
+     its test must fail. Keep the red output in NOTES.md.
+
+ROLE
+  DATA, HUMAN
+
+DEPENDS
+  20-corpus/03-text-cleaning
+  Also 40-evaluation/01-degeneracy-metrics (identifiers() is imported from there).

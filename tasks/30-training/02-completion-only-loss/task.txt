@@ -1,0 +1,42 @@
+TASK: train.py learns the completion only, ends it with EOS — proven on real batches
+
+GOAL
+  Make the loss see only the target text and make every target end with exactly one EOS
+  token, by our code rather than by library defaults (DECISIONS D7, audit T1-T3). The
+  proof is a batch inspector run on HOST against the real trainer, because Unsloth
+  patches TRL and what the documentation says is not evidence.
+
+CONTEXT
+  training/train.py:34-36 (format_example: prompt + output in one "text" field, no EOS)
+  training/train.py:60-80 (SFTConfig with dataset_text_field="text"; SFTTrainer)
+  src/tonofdevelopervoice/serve/prompts.py (PROMPT_PREFIX_TEMPLATE ends with "### Rewritten:\n")
+  training/output/README.md:41-46 (TRL 0.24.0 — read the docs for THIS version)
+  tasks/DECISIONS.md (D7)
+
+SCOPE
+  + New src/tonofdevelopervoice/train/format.py: format_example(example, eos_token) → {"prompt": PROMPT_PREFIX_TEMPLATE.format(input=...), "completion": example["output"] + eos_token}. Pure; unit tests written first and seen red (runs on the Mac, no torch).
+  + training/train.py: a function build_trainer(config) that both train() and the inspector use; dataset rows are prompt/completion; SFTConfig gets completion_only_loss=True and loses dataset_text_field.
+  + training/inspect_batch.py: build_trainer(config), take 8 samples from trainer.get_train_dataloader(), and assert for each: (a) every label at a prompt position is -100; (b) the labels that are not -100 decode to the completion text; (c) the last non-masked label is tokenizer.eos_token_id and EOS occurs exactly once in the labels; (d) sequence length < max_seq_length (nothing truncated). Writes a readable dump to inspect_batch.txt and exits non-zero on the first violation.
+  + If (a) fails although completion_only_loss=True is set (Unsloth's patched trainer ignoring it): use `unsloth.chat_templates.train_on_responses_only(trainer, instruction_part="Rewrite the following text", response_part="### Rewritten:\n")` and run the inspector again. If (c) reports two EOS tokens, TRL adds its own — then drop ours. The inspector decides; write which branch was needed into NOTES.md with the inspector output.
+  − Hyper-parameters, context length, schedule: owned by 30-training/03-training-recipe.
+  − The prompt wording: unchanged (serving and training share it through serve/prompts.py).
+  − A chat template: not introduced; this is a base model with a plain completion prompt.
+
+OUTCOME
+  `python3 training/inspect_batch.py` exits 0 on HOST and
+  tasks/30-training/02-completion-only-loss/inspect_batch.txt is in git.
+
+VERIFY (TRAIN)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. `python3 training/inspect_batch.py` exits 0 on HOST (on dataset v2 if it exists,
+     otherwise on data/dataset/ v1 — the property does not depend on the data).
+  3. Reverse control: in a scratch copy restore the single "text" field — the inspector
+     must exit non-zero on check (a). In a scratch copy remove the EOS from
+     format_example — its unit test must fail, and the inspector must fail on (c) unless
+     NOTES.md already records that TRL adds EOS itself. Keep the red outputs in NOTES.md.
+
+ROLE
+  TRAIN
+
+DEPENDS
+  30-training/01-pinned-environment

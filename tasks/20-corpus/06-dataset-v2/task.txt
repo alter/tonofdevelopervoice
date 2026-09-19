@@ -1,0 +1,47 @@
+TASK: GATE 2 — dataset v2 with a manifest computed from the files
+
+GOAL
+  Assemble the training and evaluation files, refuse anything that must not be trained
+  on, drop (not truncate) over-long pairs, and prove the properties of gate 2 with a
+  checker that reads the files. Runs on HOST.
+
+CONTEXT
+  tasks/GOAL.md (gate 2 — the numbers)
+  tasks/DECISIONS.md (D3)
+  src/tonofdevelopervoice/dataset/assemble.py:60-76 (build_pairs)
+  src/tonofdevelopervoice/dataset/split.py (from 05-diverse-synthesis)
+  src/tonofdevelopervoice/serve/prompts.py (the prompt is part of the token count)
+  training/config.yaml:6 (max_seq_length — becomes 4096 in 30-training/03-training-recipe)
+
+SCOPE
+  + dataset/assemble.py: assert_trainable(record) raises unless source is "commit" or "pr" AND author_date < 2021-01-01. build of train.jsonl calls it for every row.
+  + scripts/build_dataset_v2.py → data/dataset_v2/train.jsonl, eval_indist.jsonl, eval_heldout.jsonl. Row: id, input, output, source, project, style, text_hash.
+  + Token-length filter with the Qwen/Qwen3-8B-Base tokenizer: tokens(prompt + output) + 1 <= 4096, else the pair is DROPPED and counted.
+  + Subject-only targets (no body) are down-sampled to at most 10% of train.jsonl (the v1 model collapsed to one-line outputs, audit E5).
+  + DATASET.json: sha256 and row count per file; counts by source, project, style, year; token-length percentiles (p50, p90, p99, max); dropped per reason; and an `invariants` block of booleans.
+  + scripts/check_dataset.py DIR exits non-zero unless ALL hold: train rows >= 12000; share of source "pr" in train >= 0.30; empty outputs = 0; outputs starting with "Merge " = 0; identity trailers or git-svn-id in outputs = 0; text_hash overlap between train and either eval file = 0; held-out repositories and held-out styles absent from train; max author_date < 2021-01-01; no row with source starting with "ai_"; sha256 values match DATASET.json.
+  + Copy DATASET.json into this task directory; write 30 random train pairs to samples.md.
+  + Tests first, seen red: assert_trainable rejects an "ai_commit" record and a 2021 record; the subject-only cap; the overlap check.
+  − data/dataset/ (v1): not touched.
+  − Uploading the training set anywhere: not done. Only eval_indist.jsonl and eval_heldout.jsonl go to the private Hub dataset repo of 04-ai-eval-inputs, because the Mac needs them (D8).
+
+OUTCOME
+  `python3 scripts/check_dataset.py data/dataset_v2` exits 0 on HOST;
+  tasks/20-corpus/06-dataset-v2/DATASET.json and samples.md in git.
+
+VERIFY (HUMAN)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. `python3 scripts/check_dataset.py data/dataset_v2` exits 0 and prints every invariant.
+  3. Reverse control: copy data/dataset_v2 to .claude/scratch/, append one row of
+     data/eval_real/ai_commits.jsonl (reshaped) to the copied train.jsonl → the checker
+     exits non-zero naming the "ai_" invariant.
+  4. Reverse control: in the scratch copy duplicate one eval_indist row into train.jsonl →
+     the checker exits non-zero naming the overlap invariant. Keep both outputs in NOTES.md.
+  5. HUMAN: the owner reads samples.md — are the targets what a good engineer wrote, and
+     do the inputs say the same thing, only worse?
+
+ROLE
+  DATA, HUMAN
+
+DEPENDS
+  20-corpus/05-diverse-synthesis

@@ -1,0 +1,8 @@
+phase:training
+role:TRAIN
+type:feature
+priority:P0
+status:todo
+verify:pending
+depends:30-training/02-completion-only-loss
+milestone:M2

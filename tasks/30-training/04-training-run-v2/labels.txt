@@ -1,0 +1,8 @@
+phase:training
+role:TRAIN, HUMAN
+type:feature
+priority:P0
+status:todo
+verify:pending
+depends:30-training/03-training-recipe
+milestone:M2

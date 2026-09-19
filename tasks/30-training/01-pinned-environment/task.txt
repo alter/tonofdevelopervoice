@@ -1,0 +1,39 @@
+TASK: training/requirements.txt pinned + training/check_env.py
+
+GOAL
+  `training/requirements.txt` lists bare package names; the v1 run already broke on a
+  torch/torchvision ABI mismatch (audit T5). Pin the environment that is known to train,
+  and add a check that fails when the environment drifts. Runs on HOST.
+
+CONTEXT
+  training/requirements.txt
+  training/output/README.md:41-46 (versions that trained v1: PEFT 0.21.0, TRL 0.24.0, Transformers 5.5.0, PyTorch 2.11.0+cu128, Datasets 4.3.0, Tokenizers 0.22.2)
+  docs/plans/tonofdevelopervoice-v1.md:255-266 (import order, torchvision ABI, where the venv lives)
+  docs/runbook-training.md
+  AGENTS.md (Blackwell: driver >= 570, CUDA 12.8, cu128 wheels)
+
+SCOPE
+  + Read the truth first: `~/.venvs/tonofdevelopervoice-train/bin/pip freeze` on HOST. Save it as training/requirements.lock.
+  + training/requirements.txt: every line `name==version` taken from that freeze (torch, torchvision, unsloth, unsloth_zoo, trl, peft, transformers, bitsandbytes, datasets, tokenizers, accelerate, pyyaml, and the evaluation packages already listed). A comment-free header is impossible in requirements files, so the cu128 index instruction goes into docs/runbook-training.md: torch AND torchvision from https://download.pytorch.org/whl/cu128.
+  + training/check_env.py: compares installed versions with requirements.txt (importlib.metadata) and exits non-zero on any difference; asserts torch.cuda.is_available(), torch.cuda.is_bf16_supported(), and that `torchvision.ops.nms` runs on a 1-box tensor (the exact v1 failure).
+  + docs/runbook-training.md: replace the install section with: create venv, install torch+torchvision from cu128, `pip install -r training/requirements.txt`, `python3 training/check_env.py`.
+  − Upgrading any package: not now; pin what trained v1. An upgrade is its own task with its own reason.
+  − The Mac environment (uv): owned by 10-serving/02-mlx-conversion.
+
+OUTCOME
+  training/requirements.txt (all lines pinned), training/requirements.lock,
+  training/check_env.py; `python3 training/check_env.py` exits 0 on HOST.
+
+VERIFY (TRAIN)
+  1. `grep -vc "==" training/requirements.txt` prints 0.
+  2. `python3 training/check_env.py` exits 0 on HOST; output kept in NOTES.md.
+  3. Reverse control: copy requirements.txt to .claude/scratch/, change one version
+     there, run check_env.py against the copy (path argument) — exit code non-zero,
+     naming the package. Keep the output in NOTES.md.
+  4. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+
+ROLE
+  TRAIN
+
+DEPENDS
+  05-scope/01-ledger-update

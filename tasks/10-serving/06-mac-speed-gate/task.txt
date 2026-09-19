@@ -1,0 +1,40 @@
+TASK: GATE 1 — nine owner files on the MacBook: speed and memory
+
+GOAL
+  Measure, on the owner's machine in its normal state, whether an 8B model at 4 bits is
+  usable: gate 1 of GOAL.md. The result also decides the base model for training run v2
+  (DECISIONS D6). Output quality is NOT judged here; v1 is expected to copy.
+
+CONTEXT
+  tasks/GOAL.md (gate 1)
+  tasks/DECISIONS.md (D6)
+  data/eval_real/owner/ (nine files, 1.7-4.2 KB, saved from /tmp/pr on 2026-09-19)
+  scripts/batch_rewrite.py
+  docs/audit-2026-09-19.md (section 0 — the "before": ~3.4 hours per file)
+
+SCOPE
+  + On MAC, with the owner's usual applications open: record `sysctl vm.swapusage` and `memory_pressure | tail -1`, then run `TONOFDEVELOPERVOICE_MODEL_DIR=models/tonofdevelopervoice-qwen3-8b-v1-mlx-q4 uv run python scripts/batch_rewrite.py --dir data/eval_real/owner --out-dir <task dir>/out --force` under `time`, then record swap again.
+  + Copy batch_report.json into this task directory. Write NOTES.md: wall time, mean and minimum tokens/second, maximum peak_memory_gb, swap before/after, macOS version, mlx versions.
+  + Thresholds (fixed here, not tuned afterwards): mean tokens/second >= 10; maximum peak_memory_gb <= 6.5; wall time for nine files < 20 minutes.
+  + If a threshold fails: do not tune the thresholds. Record the failure; DECISIONS D6 then switches training run v2 to Qwen/Qwen3-4B-Base and this gate is measured again on the v2 artefact.
+  − Judging the text: owned by 40-evaluation.
+  − Closing other applications to make the number look better: forbidden; the gate is about the machine as the owner uses it.
+
+OUTCOME
+  tasks/10-serving/06-mac-speed-gate/batch_report.json and NOTES.md with the three
+  numbers and a pass/fail line per threshold.
+
+VERIFY (HUMAN)
+  1. batch_report.json has nine entries; none has finish_reason "input_too_long".
+  2. The three thresholds, computed from batch_report.json by a one-line Python command
+     written in NOTES.md, pass — or the failure and the D6 switch are recorded.
+  3. HUMAN: the owner confirms the MacBook stayed usable during the run.
+  4. Reverse control: compute the same three numbers for the fp16 path from the audit
+     evidence (2 files in ~6.8 hours, 256 tokens each = ~0.02 tokens/second): the
+     threshold check must report FAIL for it. This proves the check can be red.
+
+ROLE
+  SERVE, HUMAN
+
+DEPENDS
+  10-serving/05-batch-rewrite

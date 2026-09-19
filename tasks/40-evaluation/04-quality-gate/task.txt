@@ -1,0 +1,43 @@
+TASK: GATE 3 — model v2 on real inputs, thresholds fixed on 2026-09-19
+
+GOAL
+  Decide whether model v2 keeps the promise of GOAL.md. The thresholds are written here,
+  before dataset v2 and model v2 exist, and are not tuned to the result.
+
+CONTEXT
+  tasks/GOAL.md (gate 3, stop condition)
+  tasks/40-evaluation/02-shipped-path-eval/ (v2 reports)
+  tasks/40-evaluation/03-baselines/ (baseline reports)
+  tasks/40-evaluation/01-degeneracy-metrics/before_v1.json
+  tasks/ROLES.md (EVAL, HUMAN)
+
+SCOPE
+  + scripts/check_quality_gate.py REPORT_DIR BASELINE_DIR: exits non-zero unless ALL hold.
+  + On real_ai and on owner (each): copy_rate <= 0.05; truncation_rate <= 0.02; empty_rate == 0; trailer_leak_rate <= 0.01; fact_retention_mean >= 0.80; 0.25 <= length_ratio_median <= 0.85.
+  + Against prompted_instruct on real_ai: style_score_mean >= baseline + 0.05 AND fact_retention_mean >= baseline - 0.05.
+  + Generalisation: reference_fidelity_mean on eval_heldout >= the same on eval_indist - 0.03.
+  + samples.md: 20 inputs drawn with a fixed seed (10 real_ai, 5 eval_heldout, 5 owner), each with the input, the v2 output and the prompted_instruct output (owner rows: v2 only).
+  + HUMAN: the owner marks each of the 20 accept / reject in samples.md. Pass = at least 16 accepted and no rejected sample that lost a fact.
+  + If the gate fails: no threshold edits. NOTES.md names the failing metric and the audit finding it points to; a new task is created for that cause, or GOAL.md's stop condition is invoked.
+  − Changing a threshold: a separate commit by EVAL with a written reason, never in the same commit as a result.
+  − Publishing anything beyond what D8 already covers: not part of the gate.
+
+OUTCOME
+  tasks/40-evaluation/04-quality-gate/GATE.json (every condition, its value, pass/fail)
+  and samples.md with the owner's marks.
+
+VERIFY (HUMAN)
+  1. `python3 scripts/check_quality_gate.py <v2 reports> <baselines>` exits 0 and GATE.json lists every condition.
+  2. HUMAN: samples.md carries 20 marks by the owner; >= 16 accepted.
+  3. Reverse control: the same script over the v1 reports (before_v1.json / baseline v1)
+     exits non-zero on copy_rate. Keep the output in NOTES.md.
+  4. Reverse control: over the identity baseline it exits non-zero on copy_rate and on
+     length_ratio_median.
+  5. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+
+ROLE
+  EVAL, HUMAN
+
+DEPENDS
+  40-evaluation/03-baselines
+  Also 30-training/04-training-run-v2.

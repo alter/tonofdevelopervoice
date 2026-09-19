@@ -1,0 +1,52 @@
+TASK: MlxInferenceBackend — in-process 4-bit inference; the fp16 path is gone
+
+GOAL
+  The backend the owner's MacBook actually uses (D1). It loads the MLX 4-bit directory,
+  honours GenerationSettings, and reports speed and memory from mlx_lm's own counters.
+  The fp16 PEFT backend — the direct cause of ~48 s/token — is deleted, and the factory
+  refuses to start a 16 GB load on a machine without CUDA.
+
+CONTEXT
+  src/tonofdevelopervoice/serve/factory.py:19-36
+  src/tonofdevelopervoice/serve/peft_backend.py (to delete)
+  tests/test_peft_backend.py (pattern for faking a heavy module through sys.modules; to delete)
+  tests/test_unsloth_backend.py (same pattern; stays)
+  tests/test_backend_factory.py
+  src/tonofdevelopervoice/serve/generation.py (from 03-rewrite-result)
+  tasks/10-serving/02-mlx-conversion/MLX_MANIFEST.json
+
+SCOPE
+  + serve/mlx_backend.py, class MlxInferenceBackend(model_dir, settings=GenerationSettings()). Imports happen inside __init__, as in the other backends.
+  + API to use, checked against mlx-lm 0.31.3 on 2026-09-19: `from mlx_lm import load, stream_generate`; `from mlx_lm.sample_utils import make_sampler, make_logits_processors`. `load(model_dir)` returns (model, tokenizer). `stream_generate(model, tokenizer, prompt, max_tokens=..., sampler=..., logits_processors=...)` yields responses with fields text, prompt_tokens, generation_tokens, generation_tps, peak_memory, finish_reason ("stop" or "length" on the last one).
+  + rewrite(): format the prompt with PROMPT_PREFIX_TEMPLATE; count prompt tokens with the tokenizer; apply the input_too_long rule; budget = completion_budget(...); join the `.text` pieces; take counters and finish_reason from the last response; strip the result.
+  + factory.py: a directory with config.json containing a "quantization" key is an MLX model → MlxInferenceBackend. A directory with adapter_config.json → Unsloth backend if CUDA is available, otherwise raise RuntimeError that names docs/runbook-deploy.md. TONOFDEVELOPERVOICE_BACKEND accepts "unsloth" or "mlx".
+  + Delete serve/peft_backend.py and tests/test_peft_backend.py; remove "peft" from the factory and its tests.
+  + Tests first, seen red, with a fake `mlx_lm` module in sys.modules: result fields come from the last response; "length" is passed through; input_too_long generates nothing (the fake records zero calls); factory picks MLX for a quantised config.json; factory raises for an adapter directory without CUDA.
+  − Conversion script: owned by 10-serving/02-mlx-conversion.
+  − batch_rewrite.py behaviour: owned by 10-serving/05-batch-rewrite.
+  − UnslothInferenceBackend internals: not touched beyond 03-rewrite-result.
+  − Keeping the model resident between CLI calls (a daemon): not built; an mmap-ed 4.6 GB load takes seconds (measure it, put the number in NOTES.md).
+
+OUTCOME
+  `TONOFDEVELOPERVOICE_MODEL_DIR=models/tonofdevelopervoice-qwen3-8b-v1-mlx-q4 uv run python -m tonofdevelopervoice.cli --file data/eval_real/owner/9.txt`
+  finishes on MAC in under 3 minutes. (The text will still be a copy — that is audit
+  fact B, not this task.)
+
+VERIFY (SERVE)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. `test ! -e src/tonofdevelopervoice/serve/peft_backend.py`.
+  3. The OUTCOME command, timed with `time`, under 3 minutes; wall time and the
+     tokens/second printed to stderr are recorded in NOTES.md.
+  4. Reverse control: `TONOFDEVELOPERVOICE_MODEL_DIR=training/output uv run python -m tonofdevelopervoice.cli --text x`
+     on MAC exits non-zero within seconds with the RuntimeError and does NOT start
+     downloading or loading Qwen/Qwen3-8B-Base. Keep the output in NOTES.md.
+  5. Reverse control: in a scratch copy make the backend ignore finish_reason and always
+     report "stop" — the "length" test must fail.
+
+ROLE
+  SERVE
+
+DEPENDS
+  10-serving/03-rewrite-result
+  Also needs 10-serving/02-mlx-conversion for VERIFY items 3 and 4 (the unit-tested
+  part can be written before it).

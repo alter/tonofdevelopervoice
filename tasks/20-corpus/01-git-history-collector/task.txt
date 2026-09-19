@@ -1,0 +1,49 @@
+TASK: collect/git_history.py — commits sampled across the whole pre-2021 history
+
+GOAL
+  v1 paged the GitHub API newest-first and stopped at 1000, so every repository is
+  represented by a few months of 2020 (audit D1). Replace that with local bare clones and
+  `git log`, sampled evenly across years and capped per author. Runs on HOST.
+
+CONTEXT
+  src/tonofdevelopervoice/collect/github_api.py:11-43 (what is being replaced for commits)
+  src/tonofdevelopervoice/collect/filters.py:21-47 (date and AI-trailer rules — reuse, do not copy)
+  src/tonofdevelopervoice/collect/pipeline.py:11-41 (record schema, write_jsonl)
+  tests/test_collector.py
+  docs/research/data-collection.md
+  tasks/DECISIONS.md (D2)
+
+SCOPE
+  + collect/sources.py: COMMIT_REPOS = torvalds/linux, postgres/postgres, nginx/nginx, apache/httpd, mysql/mysql-server, git/git, curl/curl, redis/redis, FFmpeg/FFmpeg, python/cpython, golang/go. Changing the list is allowed (docs/PROJECT.md §4); write the reason in NOTES.md.
+  + Clone: `git clone --bare --filter=tree:0 https://github.com/<repo>.git data/repos/<name>.git` (commit objects only, no file contents). Skip when the directory exists.
+  + Read: `git -C <dir> log --no-merges --before=2021-01-01T00:00:00Z --format=%H%x1f%aI%x1f%cI%x1f%ae%x1f%B%x1e`, decoded as UTF-8 with errors="replace"; records containing U+FFFD are dropped.
+  + Every record passes filters.is_valid_record (author date < 2021, no AI co-author trailer, commit date < 2023).
+  + Record schema: id (= sha), sha, source "commit", repo, text, author_date, commit_date, author_hash (first 12 hex of sha256 of the author e-mail). The e-mail itself is never written.
+  + Sampling, deterministic: target 5000 per repository; equal quota per calendar year (unused quota of thin years is redistributed); inside a year order by sha256(sha) and take from the top; no author_hash may exceed 2% of the repository's target.
+  + scripts/collect_git.py writes data/raw_v2/commits/<name>.jsonl and data/raw_v2/commits/MANIFEST.json (per repository: count, per-year histogram, largest author share). Copy MANIFEST.json into this task directory.
+  + Tests first, seen red, against a real temporary git repository created inside the test (git is a real boundary here): merge commit excluded; commit dated 2021-06 excluded; AI trailer excluded; per-author cap respected; same input → same sample.
+  − PR text: owned by 20-corpus/02-pr-collector.
+  − Stripping trailers, dropping short or empty messages: owned by 20-corpus/03-text-cleaning (this task stores raw text).
+  − data/raw/ (v1): not read, not written.
+  − Removing collect/github_api.py: it stays for 02-pr-collector to build on.
+
+OUTCOME
+  data/raw_v2/commits/*.jsonl on HOST (11 files) and
+  tasks/20-corpus/01-git-history-collector/MANIFEST.json in git, in which every
+  repository spans at least 5 distinct years and no author share exceeds 0.02.
+
+VERIFY (DATA)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. A one-line Python command in NOTES.md recomputes from data/raw_v2/commits/*.jsonl:
+     max author_date < 2021-01-01; records starting with "Merge " = 0; distinct years per
+     repository >= 5. Its output matches MANIFEST.json.
+  3. A one-line Python command in NOTES.md shows the set of keys over all records; it
+     contains author_hash and contains neither "author" nor "email".
+  4. Reverse control: in a scratch copy remove the is_valid_record call — the 2021-06 test
+     must fail. Keep the red output in NOTES.md.
+
+ROLE
+  DATA
+
+DEPENDS
+  05-scope/01-ledger-update

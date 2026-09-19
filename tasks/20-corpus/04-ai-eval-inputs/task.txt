@@ -1,0 +1,44 @@
+TASK: data/eval_real — real AI-written commit and PR text, for evaluation only
+
+GOAL
+  v1 was evaluated only on text produced by its own synthesis prompt and nobody saw that
+  it copies real input (audit E2). Collect real AI-written text — the inverse of the
+  training filter — as evaluation INPUTS. There are no references for them; they feed
+  the reference-free metrics of 40-evaluation. Never training (DECISIONS D3).
+
+CONTEXT
+  tasks/DECISIONS.md (D3)
+  src/tonofdevelopervoice/collect/filters.py:5-22 (AI_CO_AUTHOR_PATTERN, has_ai_co_author)
+  src/tonofdevelopervoice/collect/github_api.py:24-36 (request headers)
+  data/eval_real/owner/ (nine owner files already saved here)
+
+SCOPE
+  + scripts/collect_ai_eval_inputs.py (thin) + evaluate/ai_inputs.py (pure selection logic, unit-tested).
+  + Commits: GET /search/commits with queries such as `"Co-authored-by: Claude" committer-date:>2023-01-01`, one query per agent name family (Claude, Copilot, Cursor, Devin, aider, Codex, Gemini). The search API returns at most 1000 results per query and allows 30 requests per minute — sleep accordingly.
+  + PRs: GET /search/issues with `type:pr "Generated with" in:body created:>2023-01-01` and similar; fetch the body.
+  + Keep a text only if: has_ai_co_author(text) is true or the body carries a "Generated with <agent>" line; date >= 2023-01-01; commit message >= 300 characters, PR body >= 500 characters; at most 5 items per repository; exact duplicates removed.
+  + Before storing, remove the AI trailer lines and "Generated with ..." lines from the text (otherwise the style classifier learns the trailer, not the style). Keep the detected agent name in a separate field.
+  + Output: data/eval_real/ai_commits.jsonl (target 300) and data/eval_real/ai_prs.jsonl (target 200); fields id, source ("ai_commit" | "ai_pr"), repo, date, agent, text. MANIFEST.json with counts per agent, min date, sha256 of both files — copied into this task directory.
+  + Upload data/eval_real/ (without owner/) to a PRIVATE Hub dataset repo `<hf-user>/tonofdevelopervoice-eval-sets` so the Mac can fetch it (D8).
+  + Tests first, seen red: a pre-2021 human commit fixture is rejected; trailer lines are removed from stored text; the per-repository cap holds.
+  − Any use of these records for training: forbidden; the guard lives in 20-corpus/06-dataset-v2.
+  − Committing the texts to git: not done (third-party text; data/ is gitignored).
+  − Owner files in data/eval_real/owner/: not uploaded anywhere.
+
+OUTCOME
+  data/eval_real/ai_commits.jsonl (>= 250 records) and ai_prs.jsonl (>= 150 records);
+  tasks/20-corpus/04-ai-eval-inputs/MANIFEST.json in git with the Hub dataset commit.
+
+VERIFY (EVAL)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. A one-line Python command in NOTES.md recomputes: min date >= 2023-01-01; max items
+     per repository <= 5; no stored text matches AI_CO_AUTHOR_PATTERN.
+  3. sha256 of both files equals MANIFEST.json.
+  4. Reverse control: in a scratch copy invert the date condition — the pre-2021 fixture
+     test must fail. Keep the red output in NOTES.md.
+
+ROLE
+  EVAL
+
+DEPENDS
+  05-scope/01-ledger-update

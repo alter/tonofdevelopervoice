@@ -1,0 +1,45 @@
+TASK: collect/github_prs.py — merged PR descriptions created before 2021
+
+GOAL
+  The owner rewrites PR descriptions; the model has never seen one (audit D2). Collect
+  human-written PR titles and bodies from projects that lived on GitHub pull requests
+  before 2021 (linux, postgresql and nginx do not use them — different repositories are
+  needed). Runs on HOST or MAC; needs GITHUB_TOKEN from .env.
+
+CONTEXT
+  src/tonofdevelopervoice/collect/github_api.py:11-43 (request shape, headers)
+  src/tonofdevelopervoice/collect/filters.py:21-47
+  src/tonofdevelopervoice/env.py
+  tests/test_collector.py (how HTTP is faked)
+  AGENTS.md ("async work needs retries, idempotency, ordering ... failure visibility")
+
+SCOPE
+  + collect/sources.py: PR_REPOS = kubernetes/kubernetes, rust-lang/rust, nodejs/node, django/django, rails/rails, ansible/ansible, moby/moby, prometheus/prometheus, etcd-io/etcd, python/cpython, pandas-dev/pandas, saltstack/salt.
+  + Endpoint: GET /repos/{repo}/pulls?state=closed&sort=created&direction=asc&per_page=100&page=N. Stop paging at the first PR with created_at >= 2021-01-01.
+  + Keep a PR only if: merged_at is not null; created_at < 2021-01-01; user.type == "User" and login does not end with "[bot]"; body is a non-empty string; has_ai_co_author(body) is false.
+  + Record schema: id "<repo>#<number>", source "pr", repo, text = title + blank line + body, author_date = created_at, author_hash = sha256(login)[:12].
+  + Same sampling rule as 01 (equal quota per year, 2% author cap), target 3000 per repository.
+  + Robustness: on 403/429 with x-ratelimit-remaining 0 sleep until x-ratelimit-reset; on 5xx retry 3 times with backoff; after each page append to the output and write the page number to a checkpoint file, so a restart continues instead of starting over. The token is never printed.
+  + scripts/collect_prs.py writes data/raw_v2/prs/<name>.jsonl and MANIFEST.json (same fields as 01). Copy MANIFEST.json into this task directory.
+  + Tests first, seen red, with faked HTTP: unmerged PR dropped; bot dropped; 2021 PR stops paging; rate-limit response leads to a sleep (inject the sleep function) and a retry; restart from checkpoint does not duplicate records.
+  − Review comments, issue text, commit lists of the PR: not collected.
+  − Cleaning PR templates and checkboxes: owned by 20-corpus/03-text-cleaning.
+  − GraphQL: not used; REST is enough and is already in the code base.
+
+OUTCOME
+  data/raw_v2/prs/*.jsonl and tasks/20-corpus/02-pr-collector/MANIFEST.json with at least
+  20000 PR records in total.
+
+VERIFY (DATA)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. A one-line Python command in NOTES.md recomputes: total records >= 20000; max
+     author_date < 2021-01-01; records whose text contains "[bot]" login = 0.
+  3. `grep -rn "ghp_\|github_pat_" data/raw_v2 tasks/20-corpus` prints nothing.
+  4. Reverse control: in a scratch copy remove the merged_at condition — the unmerged-PR
+     test must fail. Keep the red output in NOTES.md.
+
+ROLE
+  DATA
+
+DEPENDS
+  05-scope/01-ledger-update

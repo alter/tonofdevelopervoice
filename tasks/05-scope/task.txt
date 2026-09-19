@@ -1,0 +1,28 @@
+TASK: Phase 05 — scope: the owner's decisions are in the ledger
+
+GOAL
+  docs/PROJECT.md owns scope. The rebuild adds capabilities (PR text collection,
+  on-device MLX inference, AI-written text for evaluation) that have no ledger row
+  yet. This phase records them before any code is written. Serves no gate directly.
+
+CONTEXT
+  docs/PROJECT.md
+  docs/audit-2026-09-19.md
+  tasks/DECISIONS.md (D1, D2, D3)
+
+SCOPE
+  + 01-ledger-update — ledger rows, approval note, stale "Soup" wording removed
+  − any code change: owned by phases 10-50
+
+OUTCOME
+  docs/PROJECT.md describes the project that is about to be built.
+
+VERIFY (ARCH)
+  1. The child task is status:done and verify:passed.
+  2. Reverse control: see the child task.
+
+ROLE
+  ARCH
+
+DEPENDS
+  (none)

@@ -1,0 +1,50 @@
+TASK: training/export.py — LoRA merged into the bf16 base, published
+
+GOAL
+  Training ends with an adapter that only loads on a bitsandbytes/CUDA base (audit T6).
+  This task adds the missing export step: one script that merges any of our adapters
+  into Qwen/Qwen3-8B-Base at bfloat16, proves the merge changed the model, and uploads
+  the result. It is run now on the v1 adapter and again after training run v2.
+  Runs on HOST (80 GB RAM: the merge is done on CPU, no GPU memory needed).
+
+CONTEXT
+  training/output/adapter_config.json (base_model_name_or_path, r, target_modules)
+  training/train.py:44-55 (how the adapter was created)
+  src/tonofdevelopervoice/serve/peft_backend.py:37-39 (the load sequence to reuse)
+  src/tonofdevelopervoice/serve/prompts.py
+  src/tonofdevelopervoice/env.py (load_dotenv — HF_TOKEN comes from .env)
+  tasks/DECISIONS.md (D8)
+
+SCOPE
+  + training/export.py with arguments: --adapter DIR, --base (default Qwen/Qwen3-8B-Base), --out DIR, --push REPO_ID (optional), --manifest PATH.
+  + Steps inside, in this order: load base with transformers AutoModelForCausalLM, dtype=torch.bfloat16, on CPU; PeftModel.from_pretrained(base, adapter); merge_and_unload(); save_pretrained(out, safe_serialization=True); copy the tokenizer from the adapter directory.
+  + Self-check before saving: for one fixed prompt (first row of the eval file, formatted with PROMPT_PREFIX_TEMPLATE) compute next-token logits with (a) plain base, (b) base+adapter, (c) merged. Require max|b−c| < 0.05 and max|a−c| > 0.05. Exit non-zero otherwise.
+  + Manifest JSON: adapter sha256, base repo id and resolved commit hash, sha256 and size of every written file, versions of torch/transformers/peft, Hub repo id and commit hash when pushed.
+  + Run it on training/output → Hub repo `<hf-user>/tonofdevelopervoice-qwen3-8b-v1-merged` (public; `<hf-user>` = output of `hf auth whoami` with HF_TOKEN from .env). Set HF_HUB_DISABLE_XET=1 (known stall, docs/plans/tonofdevelopervoice-v1.md:271).
+  + Save the manifest as tasks/10-serving/01-merged-export/EXPORT.json.
+  − Quantisation and MLX conversion: owned by 10-serving/02-mlx-conversion.
+  − Using Unsloth's save_pretrained_merged: not used, so that export works without Unsloth and identically for every adapter.
+  − Printing or logging HF_TOKEN: forbidden (AGENTS.md).
+
+OUTCOME
+  tasks/10-serving/01-merged-export/EXPORT.json exists and names a Hub repo and commit.
+  The Hub repo holds ~16 GB of safetensors. Because the Hub repo is outside the
+  repository, this task is closed by the verifier, not by the executor.
+
+VERIFY (TRAIN)
+  1. `python3 training/export.py --adapter training/output --out <tmp> --manifest <tmp>/EXPORT.json`
+     exits 0 on HOST and prints the two logit differences.
+  2. From a clean shell: `hf download <repo from EXPORT.json> config.json` succeeds and the
+     Hub commit hash equals the one in EXPORT.json.
+  3. sha256 of one downloaded safetensors shard equals the value in EXPORT.json.
+  4. Reverse control: run the self-check with --adapter pointing at a copy of the adapter
+     whose lora_B tensors are zeroed (a scratch copy; zero lora_B = no change). The script
+     must exit non-zero with "merged model equals base". Keep the red output in NOTES.md.
+  5. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0
+     (training/ is excluded from mypy and coverage, pyproject.toml:29).
+
+ROLE
+  TRAIN
+
+DEPENDS
+  05-scope/01-ledger-update

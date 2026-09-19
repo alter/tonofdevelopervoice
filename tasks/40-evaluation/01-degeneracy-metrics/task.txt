@@ -1,0 +1,44 @@
+TASK: evaluate/degeneracy.py — metrics that turn red on a copy
+
+GOAL
+  `content_similarity(output, source)` gives a verbatim copy the top score (audit E1).
+  Add the reference-free metrics that expose the failure modes actually seen, and
+  record the v1 "before" numbers on the owner's nine files.
+
+CONTEXT
+  src/tonofdevelopervoice/evaluate/metrics.py:31-32
+  src/tonofdevelopervoice/evaluate/report.py:36-78
+  tests/test_metrics.py
+  tests/test_report.py
+  data/eval_real/owner/ and data/eval_real/owner_v1_outputs/ (two real copies)
+  tasks/10-serving/06-mac-speed-gate/batch_report.json and out/ (nine v1 outputs with finish reasons)
+
+SCOPE
+  + evaluate/degeneracy.py, pure, tests first and seen red:
+  + copied_fraction(output, source): share of OUTPUT characters lying inside matching blocks of >= 30 characters (difflib.SequenceMatcher(None, source, output, autojunk=False).get_matching_blocks()). A plain similarity ratio is NOT enough: a truncated copy of a long input scores only ~0.4 on ratio() and 1.0 here. is_copy = copied_fraction >= 0.5.
+  + length_ratio(output, source) on whitespace tokens.
+  + identifiers(text): set of code-like tokens — calls `name()`, snake_case and dotted names, paths with an extension, `#123` references, hex ids of 7-40 characters, numbers with units. fact_retention(output, source) = share of identifiers(source) found in output (1.0 when the source has none).
+  + trailer_leak(output, source): output has an identity trailer or git-svn-id line that the source does not have.
+  + EvalExample gains finish_reason; EvalReport gains copy_rate, truncation_rate (finish_reason != "stop"), empty_rate, trailer_leak_rate, fact_retention_mean, length_ratio_median; content_similarity stays but is no longer read alone. References become optional (sets without references skip reference_fidelity).
+  + before_v1.json in this task directory: these metrics over the nine v1 outputs of gate 1.
+  − Style classifier and embedding models: unchanged here.
+  − Thresholds: owned by 40-evaluation/04-quality-gate.
+
+OUTCOME
+  tasks/40-evaluation/01-degeneracy-metrics/before_v1.json with copy_rate and
+  truncation_rate for v1 (expected near 1.0 — measured, not assumed).
+
+VERIFY (EVAL)
+  1. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+  2. A test uses the first 1000 characters of a 3800-character text as output:
+     copied_fraction == 1.0 and is_copy is true; a genuine rewrite fixture gives < 0.5.
+  3. Reverse control: in a scratch copy replace copied_fraction with SequenceMatcher.ratio()
+     — the truncated-copy test must fail (ratio is ~0.4). Keep the red output in NOTES.md.
+  4. before_v1.json exists and its copy_rate is computed from the nine files, with the
+     command in NOTES.md.
+
+ROLE
+  EVAL
+
+DEPENDS
+  10-serving/06-mac-speed-gate

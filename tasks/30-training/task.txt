@@ -1,0 +1,35 @@
+TASK: Phase 30 — training: a reproducible run that learns the completion only
+
+GOAL
+  v1 spent most of its gradient on modelling the AI-style prompt, left EOS to library
+  defaults, truncated silently and cannot be reproduced (audit section 3). This phase
+  fixes the recipe, proves it on real batches, and produces model v2 as the shipped
+  4-bit artefact. Feeds gate 3.
+
+CONTEXT
+  docs/audit-2026-09-19.md (section 3)
+  tasks/DECISIONS.md (D6, D7, D8)
+  training/train.py
+  training/config.yaml
+  src/tonofdevelopervoice/train/config.py
+
+SCOPE
+  + 01-pinned-environment — exact versions, an environment check that can fail
+  + 02-completion-only-loss — prompt/completion rows, explicit EOS, batch inspector
+  + 03-training-recipe — seed, 4096 context, schedule, best checkpoint, RUN.json
+  + 04-training-run-v2 — the run, the export, the MLX conversion
+  − Changing the framework (Unsloth stays; docs/research/frameworks.md)
+  − Preference optimisation (DPO and similar): not before SFT is proven by gate 3
+
+OUTCOME
+  tasks/30-training/04-training-run-v2/ holds RUN.json, EXPORT.json, MLX_MANIFEST.json.
+
+VERIFY (TRAIN)
+  1. All four child tasks are status:done and verify:passed.
+  2. Reverse control: see 02-completion-only-loss item 3.
+
+ROLE
+  TRAIN, HUMAN
+
+DEPENDS
+  05-scope

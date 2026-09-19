@@ -1,0 +1,8 @@
+phase:serving
+role:SERVE
+type:feature
+priority:P0
+status:todo
+verify:pending
+depends:05-scope
+milestone:M1

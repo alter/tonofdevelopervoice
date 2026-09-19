@@ -1,0 +1,27 @@
+TASK: Phase 50 — docs: runbooks describe the pipeline that exists
+
+GOAL
+  After the rebuild both runbooks describe a path that no longer exists (fp16 PEFT on
+  the Mac, API-only collection). Serves no gate; closes the work.
+
+CONTEXT
+  docs/runbook-deploy.md
+  docs/runbook-training.md
+  docs/audit-2026-09-19.md (section 6)
+
+SCOPE
+  + 01-runbooks — deploy and training runbooks rewritten and walked through
+  − docs/PROJECT.md: owned by 05-scope/01-ledger-update
+
+OUTCOME
+  Both runbooks can be followed from a clean checkout.
+
+VERIFY (ARCH)
+  1. The child task is status:done and verify:passed.
+  2. Reverse control: see the child task.
+
+ROLE
+  SERVE, TRAIN
+
+DEPENDS
+  40-evaluation

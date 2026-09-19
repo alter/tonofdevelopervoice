@@ -1,0 +1,37 @@
+TASK: Phase 20 — corpus: dataset v2 from full history, PR text and many styles
+
+GOAL
+  The model copies because it was shown 550 pairs of one year, one synthesis style, no
+  PR text and dirty targets (audit section 2). This phase builds dataset v2 and proves
+  its properties with a manifest computed from the files. Serves gate 2.
+
+CONTEXT
+  docs/audit-2026-09-19.md (section 2)
+  tasks/DECISIONS.md (D2, D3)
+  docs/research/SUMMARY.md:37-50 (the collection decision that was never implemented)
+  src/tonofdevelopervoice/collect/
+  src/tonofdevelopervoice/dataset/assemble.py
+  scripts/synthesize.py
+
+SCOPE
+  + 01-git-history-collector — commits from full history via bare partial clones
+  + 02-pr-collector — merged PRs created before 2021, GitHub REST API
+  + 03-text-cleaning — trailers, merges, empties, templates, duplicates
+  + 04-ai-eval-inputs — real AI-written commits/PRs, evaluation inputs only
+  + 05-diverse-synthesis — eight styles, two held out, validated outputs
+  + 06-dataset-v2 — GATE 2: assembly, guard, token-length filter, manifest
+  − Deleting or overwriting data/raw/ or data/dataset/: forbidden (D2)
+  − Training: owned by 30-training
+
+OUTCOME
+  data/dataset_v2/ on HOST and tasks/20-corpus/06-dataset-v2/DATASET.json in git.
+
+VERIFY (DATA)
+  1. All six child tasks are status:done and verify:passed.
+  2. Reverse control: see 06-dataset-v2 items 3 and 4.
+
+ROLE
+  DATA, EVAL, HUMAN
+
+DEPENDS
+  05-scope

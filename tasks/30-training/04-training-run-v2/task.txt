@@ -1,0 +1,49 @@
+TASK: Model v2 — trained, merged, converted, downloadable on the Mac
+
+GOAL
+  The run itself and the two export steps, so that the result is the shipped 4-bit
+  artefact and not an adapter on HOST. Training needs the GPU memory that the owner's
+  llama-server holds (~26.8 of 32.6 GB, docs/plans/tonofdevelopervoice-v1.md:320), so it
+  starts only after synthesis is finished and the owner has freed the GPU.
+
+CONTEXT
+  docs/runbook-training.md
+  training/inspect_batch.py (must pass on dataset v2 before the run)
+  training/export.py (from 10-serving/01-merged-export)
+  scripts/convert_mlx.py (from 10-serving/02-mlx-conversion)
+  tasks/20-corpus/06-dataset-v2/DATASET.json
+  docs/plans/tonofdevelopervoice-v1.md:264-276 (download stalls: HF_HUB_DISABLE_XET=1; pre-fetch with snapshot_download)
+
+SCOPE
+  + HUMAN precondition: the owner stops llama-server on HOST or says the GPU is free. Without that: BLOCKED.md, nothing else.
+  + On HOST: check_env.py, check_dataset.py data/dataset_v2, inspect_batch.py — all exit 0 — then `python3 training/train.py`. Rough expectation: ~14000 pairs x 2 epochs at ~1200 tokens = ~34M tokens, a few hours on the RTX 5090 (an estimate; RUN.json gets the real number).
+  + Export: `python3 training/export.py --adapter training/runs/<run>/ --out ... --push <hf-user>/tonofdevelopervoice-qwen3-<size>-v2-merged`.
+  + On MAC: `scripts/convert_mlx.py --hf-path <that repo> --mlx-path models/tonofdevelopervoice-qwen3-<size>-v2-mlx-q4`, upload as `...-v2-mlx-q4`.
+  + Copy RUN.json, EXPORT.json, MLX_MANIFEST.json, inspect_batch.txt into this task directory.
+  + Tell the owner the GPU is free again (one line in NOTES.md; restarting llama-server is the owner's action).
+  − Judging quality: owned by 40-evaluation/04-quality-gate. A low eval_loss is not acceptance.
+  − Overwriting training/output/ (published v1 adapter): forbidden.
+  − Committing the v2 adapter to Git LFS: not done; weights travel through the Hub (D8).
+
+OUTCOME
+  tasks/30-training/04-training-run-v2/{RUN.json,EXPORT.json,MLX_MANIFEST.json} in git;
+  the MLX v2 model directory on MAC. The Hub repos are outside the repository, so the
+  task is closed by the verifier.
+
+VERIFY (TRAIN)
+  1. RUN.json: best checkpoint step > 0; eval_loss series is not monotonically rising;
+     DATASET.json sha256 equals tasks/20-corpus/06-dataset-v2/DATASET.json.
+  2. On MAC from a clean shell: `hf download <mlx repo>` then
+     `scripts/convert_mlx.py --verify <dir> <MLX_MANIFEST.json>` exits 0.
+  3. `scripts/batch_rewrite.py --dir data/eval_real/owner` with the v2 model: every file
+     finish_reason "stop". (Not a quality judgement — only that EOS works.)
+  4. Reverse control: the same command with the v1 MLX model gives copied output with
+     finish_reason "length" on at least one file (the known defect) — this shows item 3
+     can be red.
+
+ROLE
+  TRAIN, HUMAN
+
+DEPENDS
+  30-training/03-training-recipe
+  Also 20-corpus/06-dataset-v2 (gate 2 passed) and 10-serving/02-mlx-conversion.

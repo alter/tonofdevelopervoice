@@ -1,0 +1,35 @@
+TASK: Phase 10 — serving: the existing adapter is fast on the Mac
+
+GOAL
+  Replace the 16 GB fp16 path (audit S1) with one 4-bit MLX artefact and an honest
+  in-process backend, using the adapter that already exists. This does NOT fix copying
+  (audit fact B); it makes every later measurement on the Mac possible. Serves gate 1.
+
+CONTEXT
+  docs/audit-2026-09-19.md (section 1, section 6)
+  tasks/DECISIONS.md (D1, D5, D6, D8)
+  src/tonofdevelopervoice/serve/
+  scripts/batch_rewrite.py
+
+SCOPE
+  + 01-merged-export — HOST: merge the LoRA into the bf16 base, upload to the Hub
+  + 02-mlx-conversion — MAC: convert the merged model to MLX 4-bit, manifest
+  + 03-rewrite-result — backend contract returns text + finish reason + counters
+  + 04-mlx-backend — MlxInferenceBackend; the fp16 PEFT backend is removed
+  + 05-batch-rewrite — resume, timing, report, exit codes
+  + 06-mac-speed-gate — GATE 1: nine owner files, speed and memory measured
+  − Output quality: owned by phases 20, 30, 40
+  − A network inference server (llama-server, Ollama): rejected in D1
+
+OUTCOME
+  tasks/10-serving/06-mac-speed-gate/batch_report.json with the gate numbers.
+
+VERIFY (SERVE)
+  1. All six child tasks are status:done and verify:passed.
+  2. Reverse control: see 04-mlx-backend item 4 and 06-mac-speed-gate item 4.
+
+ROLE
+  SERVE, TRAIN, HUMAN
+
+DEPENDS
+  05-scope

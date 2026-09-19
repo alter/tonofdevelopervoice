@@ -1,0 +1,45 @@
+TASK: PROJECT.md ledger matches the decisions of 2026-09-19
+
+GOAL
+  Record the owner's three decisions in docs/PROJECT.md so that later tasks build
+  `included` capabilities, not `absent` ones, and remove wording that still says the
+  project trains "via Soup" (the framework decision changed to Unsloth long ago).
+
+CONTEXT
+  docs/PROJECT.md:21 (goal row, says "via Soup")
+  docs/PROJECT.md:28-39 (capability ledger)
+  docs/PROJECT.md:54 (agent decisions, says "Soup training recipe")
+  docs/PROJECT.md:59-69 (unattended policy)
+  tasks/DECISIONS.md (D1, D2, D3, D8)
+  AGENTS.md ("Source of truth" section)
+
+SCOPE
+  + Ledger: add row "PR text collection | included | merged PRs created before 2021, GitHub REST API".
+  + Ledger: add row "On-device inference (Apple Silicon) | included | MLX 4-bit, in process (tasks/DECISIONS.md D1)".
+  + Ledger: add row "AI-written commit/PR text collection | available | evaluation inputs only, never training (D3)".
+  + Ledger "External integrations": replace Soup with Unsloth; add Hugging Face Hub as the transport for weights and evaluation sets (D8).
+  + §2 and §4: replace "via Soup" / "Soup training recipe" with Unsloth.
+  + §5: add a dated note: on 2026-09-19 the owner approved a new collection into data/raw_v2/; data/raw/ and data/dataset/ stay (D2).
+  + §9: add a row pointing at tasks/ (README.md, PROTOCOL.md, GOAL.md, DECISIONS.md).
+  + AGENTS.md "Source of truth": one bullet saying new work lives in tasks/ and docs/plans/tonofdevelopervoice-v1.md is closed history.
+  − Any change to gate checks in §6: not needed.
+  − Runbooks: owned by 50-docs/01-runbooks.
+  − docs/research/*.md: history, not edited.
+
+OUTCOME
+  docs/PROJECT.md and AGENTS.md edited as listed, in one commit.
+
+VERIFY (ARCH)
+  1. `grep -c "Soup" docs/PROJECT.md` prints a number; every remaining hit is inside a
+     sentence that says Soup was rejected. Before the edit the same command is run and
+     its output kept in NOTES.md (reverse control: the "before" count is higher).
+  2. `grep -n "PR text collection\|On-device inference\|AI-written" docs/PROJECT.md`
+     prints three ledger rows.
+  3. `grep -n "2026-09-19" docs/PROJECT.md` shows the approval note in §5.
+  4. `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0.
+
+ROLE
+  ARCH
+
+DEPENDS
+  (none)
