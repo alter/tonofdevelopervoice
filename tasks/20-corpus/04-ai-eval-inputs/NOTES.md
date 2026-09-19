@@ -110,10 +110,30 @@ the numbers here under `## After`, copy `MANIFEST.json` into this task directory
 `load_dotenv()` plus a real API call, never by trusting an ambient shell export), set
 `labels.txt` `status:done`.
 
+## After (2026-09-19, run finished)
+
+`wrote 300 commits, 200 PRs; manifest at data/eval_real/MANIFEST.json`. Re-ran `task.txt`
+VERIFY items 2-3 for real:
+
+- `ai_commits.jsonl`: 300 records (target 300, ≥ 250 required); min `date`
+  2026-07-13T10:35:44+09:00 (≥ 2023-01-01); max 5 records per repo; 0 records whose
+  stored `text` still matches `AI_CO_AUTHOR_PATTERN` (marker stripping held). Agents:
+  Claude 142, Opus 127, Sonnet 30, Gpt 1.
+- `ai_prs.jsonl`: 200 records (target 200, ≥ 150 required); min `date`
+  2026-07-29T06:04:47Z; max 5 per repo; 0 leaks. Agents: Sonnet 72, Opus 69, Claude 41,
+  Claude Code 14, Haiku 3, Cursor 1.
+- sha256 of both files matches `MANIFEST.json` exactly.
+- `grep -rn "ghp_\|github_pat_" data/eval_real tasks/20-corpus` — no real leak (see VERIFY
+  item 2 above; the one hit is `task.txt`'s own documentation of this very check).
+
+Both `--commit-target 300` / `--pr-target 200` caps were hit exactly, meaning demand
+exceeded supply at every agent query — the pool of eligible real AI-written text is not
+the bottleneck here.
+
 ## Status
 
-`labels.txt` set to `status:in_progress`: code complete, tested, gate green, one real bug
-found and fixed with evidence, reverse control done (with a correction made mid-flight,
-recorded above) — but `OUTCOME` (`data/eval_real/ai_commits.jsonl` >= 250,
-`ai_prs.jsonl` >= 150, the Hub upload) does not exist yet. Not `blocked`: nothing is
-missing, the collection is running.
+`labels.txt` set to `status:blocked` (`BLOCKED.md` in this directory): every locally
+verifiable part of `OUTCOME` is done — both files exist with the right counts, dates,
+caps, and no leaked markers; gate green; reverse control done. Only the Hub upload
+(needed so HOST can fetch this without going through the Mac) is blocked, on a missing
+write-scoped `HF_TOKEN` (`tasks/DECISIONS.md` D9) — not something to work around.

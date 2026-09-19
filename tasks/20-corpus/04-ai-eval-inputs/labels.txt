@@ -2,7 +2,7 @@ phase:corpus
 role:EVAL
 type:feature
 priority:P1
-status:in_progress
+status:blocked
 verify:pending
 depends:05-scope/01-ledger-update
 milestone:M2
