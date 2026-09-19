@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 
-class FakeEncoding(dict[str, MagicMock]):
+class FakeEncoding(dict[str, list[list[int]]]):
     def to(self, _device: object) -> "FakeEncoding":
         return self
 
@@ -54,20 +54,58 @@ def test_rewrite_builds_prompt_generates_and_decodes(
 
     _fake_flm, fake_model, fake_tokenizer = fake_unsloth
 
-    fake_encoded = FakeEncoding({"input_ids": MagicMock(), "attention_mask": MagicMock()})
-    fake_tokenizer.return_value = fake_encoded
-    fake_model.generate.return_value = ["ids"]
-    fake_tokenizer.decode.return_value = (
-        "Rewrite the following text in terse, authentic open-source engineering "
-        "commit/PR style, preserving its meaning:\n\nfix bug\n\n### Rewritten:\nfix null deref"
-    )
+    fake_tokenizer.return_value = FakeEncoding({"input_ids": [[1, 2, 3, 4, 5]]})
+    fake_model.generate.return_value = [list(range(20))]
+    fake_tokenizer.decode.return_value = "fix null deref"
 
     backend = UnslothInferenceBackend("training/output")
     result = backend.rewrite("fix bug")
 
-    assert result == "fix null deref"
+    assert result.text == "fix null deref"
+    assert result.finish_reason == "stop"
+    assert result.prompt_tokens == 5
+    assert result.completion_tokens == 15
     fake_tokenizer.assert_called()
     fake_model.generate.assert_called_once()
+
+
+def test_rewrite_reports_length_when_completion_hits_the_budget(
+    fake_unsloth: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
+    from tonofdevelopervoice.serve.generation import GenerationSettings
+    from tonofdevelopervoice.serve.unsloth_backend import UnslothInferenceBackend
+
+    _fake_flm, fake_model, fake_tokenizer = fake_unsloth
+
+    fake_tokenizer.return_value = FakeEncoding({"input_ids": [[1, 2, 3, 4, 5]]})
+    # budget = min(10, 5 + 64) = 10 new tokens; generate exactly that many.
+    fake_model.generate.return_value = [list(range(15))]
+    fake_tokenizer.decode.return_value = "cut off mid"
+
+    settings = GenerationSettings(max_completion_tokens=10)
+    backend = UnslothInferenceBackend("training/output", settings)
+    result = backend.rewrite("fix bug")
+
+    assert result.finish_reason == "length"
+    assert result.completion_tokens == 10
+
+
+def test_rewrite_refuses_input_over_max_prompt_tokens(
+    fake_unsloth: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
+    from tonofdevelopervoice.serve.generation import GenerationSettings
+    from tonofdevelopervoice.serve.unsloth_backend import UnslothInferenceBackend
+
+    _fake_flm, fake_model, fake_tokenizer = fake_unsloth
+    fake_tokenizer.return_value = FakeEncoding({"input_ids": [[1, 2, 3]]})
+
+    backend = UnslothInferenceBackend("training/output", GenerationSettings(max_prompt_tokens=2))
+    result = backend.rewrite("way too long")
+
+    assert result.finish_reason == "input_too_long"
+    assert result.text == ""
+    assert result.prompt_tokens == 3
+    fake_model.generate.assert_not_called()
 
 
 def test_satisfies_inference_backend_protocol(

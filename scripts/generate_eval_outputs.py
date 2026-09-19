@@ -35,7 +35,8 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as f:
         for i, record in enumerate(records):
-            model_output = backend.rewrite(record["input"])
+            result = backend.rewrite(record["input"])
+            model_output = result.text
             f.write(
                 json.dumps(
                     {

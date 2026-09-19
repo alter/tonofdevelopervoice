@@ -43,7 +43,11 @@ def run(argv: list[str], backend: InferenceBackend) -> int:
         print("no input text provided", file=sys.stderr)
         return 1
 
-    print(backend.rewrite(text))
+    result = backend.rewrite(text)
+    print(result.text)
+    if result.finish_reason != "stop":
+        print(f"rewrite did not finish cleanly: {result.finish_reason}", file=sys.stderr)
+        return 2
     return 0
 
 

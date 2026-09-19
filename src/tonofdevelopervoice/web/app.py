@@ -15,6 +15,11 @@ PAGE_TEMPLATE = """
   returns your input essentially unchanged, not the real model.
 </p>
 {% endif %}
+{% if finish_reason != "stop" %}
+<p style="color: #900; font-weight: bold;">
+  Rewrite did not finish cleanly: {{ finish_reason }}
+</p>
+{% endif %}
 <form method="post">
   <div style="display:flex; gap:1em;">
     <textarea name="input_text" rows="24" cols="60"
@@ -38,15 +43,19 @@ def create_app(backend: InferenceBackend | None = None) -> Flask:
     def index() -> str:
         input_text = ""
         output_text = ""
+        finish_reason = "stop"
         if request.method == "POST":
             input_text = request.form.get("input_text", "")
             if input_text.strip():
-                output_text = app.config["BACKEND"].rewrite(input_text)
+                result = app.config["BACKEND"].rewrite(input_text)
+                output_text = result.text
+                finish_reason = result.finish_reason
         return render_template_string(
             PAGE_TEMPLATE,
             input_text=input_text,
             output_text=output_text,
             using_stub=using_stub,
+            finish_reason=finish_reason,
         )
 
     return app

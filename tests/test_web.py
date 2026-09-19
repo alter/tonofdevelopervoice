@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from flask.testing import FlaskClient
 
-from tonofdevelopervoice.serve.backend import StubInferenceBackend
+from tonofdevelopervoice.serve.backend import RewriteResult, StubInferenceBackend
 from tonofdevelopervoice.web.app import create_app, main
 
 
@@ -60,8 +60,16 @@ def test_stub_backend_shows_warning_banner() -> None:
 
 def test_non_stub_backend_shows_no_warning_banner() -> None:
     class FakeRealBackend:
-        def rewrite(self, text: str) -> str:
-            return text
+        def rewrite(self, text: str) -> RewriteResult:
+            return RewriteResult(
+                text=text,
+                finish_reason="stop",
+                prompt_tokens=len(text.split()),
+                completion_tokens=len(text.split()),
+                seconds=0.0,
+                tokens_per_second=None,
+                peak_memory_gb=None,
+            )
 
     app = create_app(FakeRealBackend())
     app.config["TESTING"] = True

@@ -52,9 +52,9 @@ def run(argv: list[str], backend: InferenceBackend) -> int:
         if not text.strip():
             print(f"skipping empty file: {path.name}", file=sys.stderr)
             continue
-        rewritten = backend.rewrite(text)
+        result = backend.rewrite(text)
         out_path = out_dir / f"{path.stem}{OUTPUT_SUFFIX}"
-        out_path.write_text(rewritten, encoding="utf-8")
+        out_path.write_text(result.text, encoding="utf-8")
         print(f"{path.name} -> {out_path.name}")
 
     return 0
