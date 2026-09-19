@@ -41,18 +41,21 @@ Mac's `.venv`, which targets a different Python and has no CUDA deps):
 ```
 python3 -m venv .venv-train
 source .venv-train/bin/activate
-pip install torch --index-url https://download.pytorch.org/whl/cu128
+pip install torch==2.11.0+cu128 torchvision==0.26.0+cu128 --index-url https://download.pytorch.org/whl/cu128
 pip install -r training/requirements.txt
+python3 training/check_env.py
 ```
 
-`training/requirements.txt` pulls in `torchvision` from the plain PyPI index, which is
-ABI-incompatible with the `cu128` `torch` wheel above (`operator torchvision::nms does
-not exist`, then a `transformers` import chain failure). Reinstall it from the matching
-index right after:
-
-```
-pip install torchvision --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --no-deps
-```
+`training/requirements.txt` is pinned (`training/requirements.lock` is the full
+`pip freeze` this was cut from) to the exact versions that trained v1 — installing
+torch and torchvision from the `cu128` index *first*, at those exact pins, avoids the
+ABI mismatch (`operator torchvision::nms does not exist`, then a `transformers` import
+chain failure) that a plain-PyPI `torchvision` install used to cause here; `pip install
+-r requirements.txt` afterwards is then a no-op for both. `training/check_env.py` fails
+loudly (non-zero exit, one line per problem) if any package drifts from the pin, if CUDA
+or bf16 support is missing, or if `torchvision.ops.nms` itself is broken — that last
+check is the exact v1 failure, kept as a permanent regression check rather than a one-off
+fix.
 
 Also install `flask` into this venv (only listed as a dependency for the Mac-side venv
 in `pyproject.toml`) — the web form's process needs both it and the real

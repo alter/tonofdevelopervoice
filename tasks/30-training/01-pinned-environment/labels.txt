@@ -2,7 +2,7 @@ phase:training
 role:TRAIN
 type:chore
 priority:P1
-status:todo
+status:done
 verify:pending
 depends:05-scope/01-ledger-update
 milestone:M2
