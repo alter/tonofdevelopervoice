@@ -12,3 +12,23 @@
 ```
 
 4 hits. Line 15 (§1 Stack) already frames Soup as rejected ("chosen over Soup ... silent-correctness bugs") — this is the one hit expected to survive. Lines 21, 35, 54 are the instructional mentions T02/T01 replace.
+
+## After (T05)
+
+`python3 tasks/check.py`: `task directories: 28; gates: [...]; problems: 0`.
+
+AC1 — `grep -c "Soup" docs/PROJECT.md` → `1`; the sole hit is line 15 (§1 Stack), unchanged
+rejection sentence ("chosen over Soup ... silent-correctness bugs").
+
+AC2 — `grep -n "PR text collection\|On-device inference\|AI-written" docs/PROJECT.md`:
+```
+40:| PR text collection | included | Merged PRs created before 2021, via the GitHub REST API (`tasks/20-corpus/02-pr-collector`) |
+41:| On-device inference (Apple Silicon) | included | MLX 4-bit, loaded in process — no CUDA path on the Mac (`tasks/DECISIONS.md` D1) |
+42:| AI-written commit/PR text collection | available | Evaluation inputs only; never enters a training file (`tasks/DECISIONS.md` D3) |
+```
+
+AC3 — `grep -n "2026-09-19" docs/PROJECT.md` shows the §5 note at lines 74-75.
+
+AC4 — `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`: ruff
+clean, mypy "no issues found in 55 source files", 115 passed, coverage 100.00% meets the
+floor 100.00%. All four commands exit 0.

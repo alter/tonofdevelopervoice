@@ -1,5 +1,5 @@
 ---
-status: running
+status: done
 created: 2026-09-19
 ---
 # PROJECT.md ledger matches the decisions of 2026-09-19
@@ -54,7 +54,7 @@ touches only Markdown; the gate runs unchanged.
 - Deleting or rewording the §1 sentence that records why Soup was rejected.
 
 ## Tasks
-- [ ] T00 Baseline: stage and commit the audit session's untracked prep work
+- [x] T00 Baseline: stage and commit the audit session's untracked prep work
       (`tasks/ docs/audit-2026-09-19.md pyproject.toml`) as its own local commit (not
       pushed) so the gate reflects a clean checkout, not a dirty tree; then run the gate
       once and record the result; then capture the "before" reverse-control evidence
@@ -64,7 +64,7 @@ touches only Markdown; the gate runs unchanged.
       for the next commit (everything else already committed);
       `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0;
       `NOTES.md` contains the 4-line grep output
-- [ ] T01 Add the three new capability-ledger rows to §3 (PR text collection; on-device
+- [x] T01 Add the three new capability-ledger rows to §3 (PR text collection; on-device
       inference on Apple Silicon; AI-written commit/PR text collection) and update the
       "External integrations" row (replace Soup with Unsloth; add Hugging Face Hub) — per
       `task.txt` SCOPE lines 1-4 — verify:
@@ -72,23 +72,23 @@ touches only Markdown; the gate runs unchanged.
       prints three lines; `grep -n "External integrations" -A1 docs/PROJECT.md | grep -c "Soup"`
       prints `0`; `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run`
       exits 0
-- [ ] T02 Replace "via Soup" (§2, goal row) and "Soup training recipe" (§4, agent-decisions
+- [x] T02 Replace "via Soup" (§2, goal row) and "Soup training recipe" (§4, agent-decisions
       bullet) with Unsloth-appropriate wording; leave §1's rejection sentence untouched —
       verify: `grep -c "Soup" docs/PROJECT.md` prints `1`; `grep -n "Soup" docs/PROJECT.md`
       shows only the §1 line, and it still contains "chosen over Soup" or equivalent
       rejection language; `ruff check . && mypy . && pytest &&
       python3 scripts/coverage_gate.py --run` exits 0
-- [ ] T03 §5: add a dated note that on 2026-09-19 the owner approved a new collection into
+- [x] T03 §5: add a dated note that on 2026-09-19 the owner approved a new collection into
       `data/raw_v2/` while `data/raw/`/`data/dataset/` (v1) stay untouched (`tasks/DECISIONS.md`
       D2). §9: add a row pointing at `tasks/` (`README.md`, `PROTOCOL.md`, `GOAL.md`,
       `DECISIONS.md`) — verify: `grep -n "2026-09-19" docs/PROJECT.md` shows the §5 note;
       `grep -n "tasks/" docs/PROJECT.md` shows the new §9 row;
       `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0
-- [ ] T04 `AGENTS.md` "Source of truth": add one bullet saying new work lives in `tasks/`
+- [x] T04 `AGENTS.md` "Source of truth": add one bullet saying new work lives in `tasks/`
       and `docs/plans/tonofdevelopervoice-v1.md` is closed history — verify:
       `grep -n "tasks/" AGENTS.md` shows the new bullet;
       `ruff check . && mypy . && pytest && python3 scripts/coverage_gate.py --run` exits 0
-- [ ] T05 Close out: `python3 tasks/check.py` (0 problems); re-run the four VERIFY items
+- [x] T05 Close out: `python3 tasks/check.py` (0 problems); re-run the four VERIFY items
       from `task.txt` (AC1-AC4 above) and append their output to `NOTES.md` under
       `## After (T05)`; stage exactly `docs/PROJECT.md AGENTS.md` and commit as
       `T05: update PROJECT.md ledger and AGENTS.md for v2 rebuild decisions`
@@ -99,3 +99,22 @@ touches only Markdown; the gate runs unchanged.
       exits 0; AC1-AC4 all pass
 
 ## Log
+- T00: committed prep work as `a5313de` (61 files: `tasks/`, `docs/audit-2026-09-19.md`,
+  `pyproject.toml`). Gate on the clean commit: ruff/mypy/115 tests/coverage 100% — all 0.
+  `git status --short` clean. Captured the 4-hit "before" grep into NOTES.md.
+- T01: added 3 ledger rows (PR text collection, On-device inference, AI-written text
+  collection) and rewrote the External integrations row (Soup → Unsloth, added HF Hub).
+  grep for the 3 rows: 3 lines; Soup count in that row: 0. Gate all 0.
+- T02: replaced "via Soup" (§2) and "Soup training recipe" (§4) with Unsloth. `grep -c
+  "Soup"` now `1`, matching only §1's rejection sentence ("chosen over Soup ...
+  silent-correctness bugs"). Gate all 0.
+- T03: added the §5 2026-09-19 approval note (new collection into data/raw_v2/ etc.,
+  v1 data untouched) and a §9 row pointing at tasks/README.md, PROTOCOL.md, GOAL.md,
+  DECISIONS.md. Both greps found; gate all 0.
+- T04: added the AGENTS.md bullet pointing new work at tasks/ and marking
+  docs/plans/tonofdevelopervoice-v1.md closed history. Grep found; gate all 0.
+- T05: `python3 tasks/check.py` → 0 problems. Re-ran AC1-AC4, all pass (recorded in
+  NOTES.md "After (T05)"). Committed `docs/PROJECT.md AGENTS.md` only as `8b401e0`
+  (`git show --stat HEAD` confirms exactly those two files). Set
+  `tasks/05-scope/01-ledger-update/labels.txt` to `status:done`. All plan tasks closed;
+  `verify:passed` is left for `/verify` (another context), per `PROTOCOL.md` §5.
